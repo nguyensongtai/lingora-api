@@ -22,6 +22,7 @@ import (
 	"github.com/nguyensongtai/lingora-api/internal/course"
 	"github.com/nguyensongtai/lingora-api/internal/httpx"
 	"github.com/nguyensongtai/lingora-api/internal/platform/postgres"
+	"github.com/nguyensongtai/lingora-api/internal/progress"
 	"github.com/nguyensongtai/lingora-api/internal/user"
 )
 
@@ -68,7 +69,10 @@ func run() error {
 	}
 
 	authHandler := auth.NewHandler(authService)
-	courseHandler := course.NewHandler(course.NewService(course.NewRepo(pool)))
+	courseRepo := course.NewRepo(pool)
+	courseHandler := course.NewHandler(course.NewService(courseRepo))
+	// progress hỏi course xem bài còn sống hay không, nên dùng chung đúng repo đó.
+	progressHandler := progress.NewHandler(progress.NewService(progress.NewRepo(pool), courseRepo))
 
 	router := chi.NewRouter()
 	router.Use(
@@ -94,6 +98,7 @@ func run() error {
 	router.Route("/v1", func(r chi.Router) {
 		authHandler.Mount(r, verifier.RequireAuthenticated())
 		courseHandler.Mount(r, verifier.RequireRole(auth.RoleAdmin))
+		progressHandler.Mount(r, verifier.RequireAuthenticated())
 	})
 
 	srv := &http.Server{

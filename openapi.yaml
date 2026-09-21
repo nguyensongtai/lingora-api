@@ -422,6 +422,72 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /me/progress:
+    get:
+      tags: [progress]
+      summary: Đọc toàn bộ tiến độ của người đang đăng nhập
+      description: |
+        Trả một lần đủ dữ liệu để dựng mọi màn: tỉ lệ từng khoá, danh sách bài
+        đã đánh dấu xong, và khoá được học gần đây nhất.
+      operationId: getProgress
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Tiến độ hiện tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressSnapshot'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /me/progress/lessons/{lessonId}:
+    parameters:
+      - name: lessonId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-go-type: string
+
+    put:
+      tags: [progress]
+      summary: Đánh dấu đã học xong một bài
+      description: |
+        Idempotent: gọi lại không dời mốc hoàn thành đã ghi lần đầu.
+      operationId: markLessonComplete
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Đã ghi nhận
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [progress]
+      summary: Gỡ đánh dấu hoàn thành
+      description: |
+        Idempotent: gỡ một bài chưa từng đánh dấu vẫn trả 204.
+      operationId: markLessonIncomplete
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Đã gỡ
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -732,6 +798,44 @@ components:
           additionalProperties:
             type: string
           description: Lỗi theo từng field, chỉ có với validation_error.
+
+    CourseProgress:
+      type: object
+      required: [course_id, lesson_count, completed_count]
+      properties:
+        course_id:
+          type: string
+          format: uuid
+          x-go-type: string
+        lesson_count:
+          type: integer
+          format: int64
+          description: Tổng số bài chưa xoá của khoá — mẫu số của tỉ lệ.
+        completed_count:
+          type: integer
+          format: int64
+
+    ProgressSnapshot:
+      type: object
+      required: [courses, completed_lesson_ids, latest_course_id]
+      properties:
+        courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/CourseProgress'
+        completed_lesson_ids:
+          type: array
+          description: Id các bài đã đánh dấu xong, mới nhất trước.
+          items:
+            type: string
+            format: uuid
+            x-go-type: string
+        latest_course_id:
+          type: string
+          format: uuid
+          nullable: true
+          x-go-type: string
+          description: Khoá được học gần đây nhất; `null` khi chưa học bài nào.
 
   responses:
     BadRequest:

@@ -152,6 +152,15 @@ type CourseList struct {
 	NextCursor *string `json:"next_cursor"`
 }
 
+// CourseProgress defines model for CourseProgress.
+type CourseProgress struct {
+	CompletedCount int64  `json:"completed_count"`
+	CourseId       string `json:"course_id"`
+
+	// LessonCount Tổng số bài chưa xoá của khoá — mẫu số của tỉ lệ.
+	LessonCount int64 `json:"lesson_count"`
+}
+
 // CourseStatus Trạng thái xuất bản.
 type CourseStatus string
 
@@ -221,6 +230,16 @@ type LessonUpdate struct {
 type LoginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+}
+
+// ProgressSnapshot defines model for ProgressSnapshot.
+type ProgressSnapshot struct {
+	// CompletedLessonIds Id các bài đã đánh dấu xong, mới nhất trước.
+	CompletedLessonIds []string         `json:"completed_lesson_ids"`
+	Courses            []CourseProgress `json:"courses"`
+
+	// LatestCourseId Khoá được học gần đây nhất; `null` khi chưa học bài nào.
+	LatestCourseId *string `json:"latest_course_id"`
 }
 
 // RefreshRequest defines model for RefreshRequest.

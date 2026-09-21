@@ -166,6 +166,12 @@ type Lesson struct {
 	DeletedAt *time.Time
 }
 
+type LessonProgress struct {
+	UserID      pgtype.UUID
+	LessonID    pgtype.UUID
+	CompletedAt time.Time
+}
+
 type RefreshToken struct {
 	ID        pgtype.UUID
 	UserID    pgtype.UUID

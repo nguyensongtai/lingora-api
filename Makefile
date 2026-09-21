@@ -37,6 +37,14 @@ migrate-down: ## Roll back the last migration
 migrate-create: ## Create a migration pair: make migrate-create name=add_foo
 	migrate create -ext sql -dir db/migrations -seq $(name)
 
+.PHONY: seed
+seed: ## Nạp dữ liệu mẫu cho môi trường dev (cần docker compose up -d)
+	docker compose exec -T postgres psql -U lingora -d lingora -v ON_ERROR_STOP=1 < db/seed/001_sample_courses.sql
+
+.PHONY: token
+token: ## In ra access token admin để gọi thử API (cần JWT_SECRET)
+	go run ./cmd/devtoken
+
 .PHONY: up
 up: ## Start local Postgres and Redis
 	docker compose up -d

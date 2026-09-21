@@ -8,7 +8,9 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      # Postgres 18+ muốn một mount duy nhất ở /var/lib/postgresql; image sẽ tự
+      # đặt dữ liệu vào thư mục con theo major version để pg_upgrade chạy được.
+      - postgres-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U lingora -d lingora"]
       interval: 5s

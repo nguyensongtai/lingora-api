@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
 	"time"
@@ -14,8 +15,18 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
+	"github.com/nguyensongtai/lingora-api/internal/ratelimit"
 	"github.com/nguyensongtai/lingora-api/internal/user"
 )
+
+// LoginEmailRule giới hạn số lần thử trên MỘT tài khoản, bất kể đến từ đâu.
+// Hạn mức theo IP nằm ở middleware; hai lớp chặn hai kiểu tấn công khác nhau:
+// một kẻ dò nhiều mật khẩu của một người, và một kẻ dò nhiều người từ một máy.
+var LoginEmailRule = ratelimit.Rule{
+	Name:   "login-email",
+	Limit:  5,
+	Window: 15 * time.Minute,
+}
 
 // refreshTokenBytes là độ dài entropy của refresh token trước khi mã hoá base64.
 const refreshTokenBytes = 32
@@ -56,6 +67,7 @@ type Service struct {
 	users      users
 	sessions   sessions
 	google     googleExchanger
+	limiter    ratelimit.Limiter
 	secret     []byte
 	accessTTL  time.Duration
 	refreshTTL time.Duration
@@ -71,6 +83,9 @@ type Config struct {
 	RefreshTTL time.Duration
 	// Google để nil thì đăng nhập Google tắt, và endpoint trả 503.
 	Google googleExchanger
+	// Limiter để nil thì dùng bộ đếm trong bộ nhớ. Không có đường nào tắt hẳn
+	// hạn mức đăng nhập: tắt im lặng là cách hỏng tệ nhất của một lớp bảo vệ.
+	Limiter ratelimit.Limiter
 }
 
 // NewService từ chối secret yếu ngay lúc boot.
@@ -78,10 +93,16 @@ func NewService(userRepo users, sessionRepo sessions, cfg Config) (*Service, err
 	if len(cfg.Secret) < minSecretLen {
 		return nil, fmt.Errorf("%w (got %d)", ErrWeakSecret, len(cfg.Secret))
 	}
+	limiter := cfg.Limiter
+	if limiter == nil {
+		limiter = ratelimit.NewMemory()
+	}
+
 	return &Service{
 		users:      userRepo,
 		sessions:   sessionRepo,
 		google:     cfg.Google,
+		limiter:    limiter,
 		secret:     []byte(cfg.Secret),
 		accessTTL:  cfg.AccessTTL,
 		refreshTTL: cfg.RefreshTTL,
@@ -142,6 +163,16 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 
 // Login đổi email và mật khẩu lấy một cặp token.
 func (s *Service) Login(ctx context.Context, email, password string) (TokenPair, error) {
+	// Khoá theo email đã chuẩn hoá để đổi hoa thường không lách được hạn mức.
+	limitKey := LoginEmailRule.Key(strings.ToLower(strings.TrimSpace(email)))
+	decision, err := s.limiter.Allow(ctx, limitKey, LoginEmailRule.Limit, LoginEmailRule.Window)
+	if err != nil {
+		return TokenPair{}, fmt.Errorf("login: %w", err)
+	}
+	if !decision.Allowed {
+		return TokenPair{}, &RateLimitedError{RetryAfter: decision.RetryAfter}
+	}
+
 	found, err := s.users.GetByEmail(ctx, strings.TrimSpace(email))
 	if err != nil {
 		if errors.Is(err, user.ErrNotFound) {
@@ -162,6 +193,12 @@ func (s *Service) Login(ctx context.Context, email, password string) (TokenPair,
 
 	if err := VerifyPassword(*found.PasswordHash, password); err != nil {
 		return TokenPair{}, err
+	}
+
+	// Vào được thì xoá bộ đếm, nếu không một người gõ sai vài lần rồi gõ đúng
+	// vẫn bị khoá ở lần đăng nhập sau.
+	if err := s.limiter.Reset(ctx, limitKey); err != nil {
+		slog.WarnContext(ctx, "reset login rate limit", slog.Any("error", err))
 	}
 
 	return s.issue(ctx, found)

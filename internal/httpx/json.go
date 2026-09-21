@@ -26,6 +26,7 @@ const (
 	CodeConflict     = "conflict"
 	CodeUnauthorized = "unauthorized"
 	CodeForbidden    = "forbidden"
+	CodeRateLimited  = "rate_limited"
 	CodeInternal     = "internal_error"
 )
 

@@ -6,11 +6,13 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/nguyensongtai/lingora-api/internal/api"
 	"github.com/nguyensongtai/lingora-api/internal/httpx"
+	"github.com/nguyensongtai/lingora-api/internal/ratelimit"
 	"github.com/nguyensongtai/lingora-api/internal/user"
 )
 
@@ -24,22 +26,42 @@ type service interface {
 	CurrentUser(ctx context.Context, userID string) (user.User, error)
 }
 
+// LoginIPRule giới hạn số lần gọi các route xác thực từ một địa chỉ IP.
+// Rộng hơn hạn mức theo email vì một văn phòng hay quán cà phê dùng chung IP.
+var LoginIPRule = ratelimit.Rule{
+	Name:   "auth-ip",
+	Limit:  20,
+	Window: 15 * time.Minute,
+}
+
 // Handler ánh xạ HTTP sang nghiệp vụ xác thực.
 type Handler struct {
 	service service
+	limiter ratelimit.Limiter
 }
 
-// NewHandler nhận service đã sẵn sàng dùng.
-func NewHandler(svc service) *Handler {
-	return &Handler{service: svc}
+// NewHandler nhận service đã sẵn sàng dùng. limiter nil thì dùng bộ đếm trong
+// bộ nhớ — không có đường nào tắt hẳn hạn mức.
+func NewHandler(svc service, limiter ratelimit.Limiter) *Handler {
+	if limiter == nil {
+		limiter = ratelimit.NewMemory()
+	}
+	return &Handler{service: svc, limiter: limiter}
 }
 
 // Mount gắn route xác thực; authenticated bọc route cần token hợp lệ.
 func (h *Handler) Mount(r chi.Router, authenticated func(http.Handler) http.Handler) {
 	r.Route("/auth", func(r chi.Router) {
-		r.Post("/register", h.register)
-		r.Post("/login", h.login)
-		r.Post("/google", h.google)
+		// Chỉ bọc những route mở phiên mới. /refresh và /logout đã cầm sẵn một
+		// token hợp lệ nên không phải cửa để dò, còn chặn chúng thì một người
+		// dùng bình thường mở nhiều tab sẽ bị khoá oan.
+		r.Group(func(r chi.Router) {
+			r.Use(httpx.RateLimitByIP(h.limiter, LoginIPRule))
+			r.Post("/register", h.register)
+			r.Post("/login", h.login)
+			r.Post("/google", h.google)
+		})
+
 		r.Post("/refresh", h.refresh)
 		r.Post("/logout", h.logout)
 		r.With(authenticated).Get("/me", h.me)
@@ -193,7 +215,11 @@ func writeMalformed(w http.ResponseWriter, err error) {
 func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	var validationErr *ValidationError
 
+	var rateLimitedErr *RateLimitedError
+
 	switch {
+	case errors.As(err, &rateLimitedErr):
+		httpx.WriteRateLimited(w, rateLimitedErr.RetryAfter)
 	case errors.As(err, &validationErr):
 		httpx.Error(w, http.StatusBadRequest, httpx.CodeValidation, "Dữ liệu không hợp lệ.", validationErr.Fields)
 	case errors.Is(err, ErrGoogleNotConfigured):

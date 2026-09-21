@@ -62,6 +62,7 @@ const (
 	ErrorCodeInternalError   ErrorCode = "internal_error"
 	ErrorCodeMalformedBody   ErrorCode = "malformed_body"
 	ErrorCodeNotFound        ErrorCode = "not_found"
+	ErrorCodeRateLimited     ErrorCode = "rate_limited"
 	ErrorCodeUnauthorized    ErrorCode = "unauthorized"
 	ErrorCodeValidationError ErrorCode = "validation_error"
 )
@@ -78,6 +79,8 @@ func (e ErrorCode) Valid() bool {
 	case ErrorCodeMalformedBody:
 		return true
 	case ErrorCodeNotFound:
+		return true
+	case ErrorCodeRateLimited:
 		return true
 	case ErrorCodeUnauthorized:
 		return true
@@ -468,6 +471,9 @@ type Forbidden = Error
 
 // NotFound defines model for NotFound.
 type NotFound = Error
+
+// TooManyRequests defines model for TooManyRequests.
+type TooManyRequests = Error
 
 // Unauthorized defines model for Unauthorized.
 type Unauthorized = Error

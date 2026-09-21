@@ -23,6 +23,7 @@ import (
 	"github.com/nguyensongtai/lingora-api/internal/httpx"
 	"github.com/nguyensongtai/lingora-api/internal/platform/postgres"
 	"github.com/nguyensongtai/lingora-api/internal/progress"
+	"github.com/nguyensongtai/lingora-api/internal/ratelimit"
 	"github.com/nguyensongtai/lingora-api/internal/user"
 	"github.com/nguyensongtai/lingora-api/internal/vocabulary"
 )
@@ -60,7 +61,11 @@ func run() error {
 	defer pool.Close()
 
 	// Dependency được nối tay theo mạch repo -> service -> handler.
+	// Một limiter dùng chung cho cả hạn mức theo IP lẫn theo email.
+	limiter := ratelimit.NewMemory()
+
 	authConfig := auth.Config{
+		Limiter:    limiter,
 		Secret:     cfg.JWTSecret,
 		AccessTTL:  cfg.AccessTokenTTL,
 		RefreshTTL: cfg.RefreshTokenTTL,
@@ -82,7 +87,7 @@ func run() error {
 		return fmt.Errorf("build auth service: %w", err)
 	}
 
-	authHandler := auth.NewHandler(authService)
+	authHandler := auth.NewHandler(authService, limiter)
 	courseRepo := course.NewRepo(pool)
 	courseHandler := course.NewHandler(course.NewService(courseRepo))
 	// progress hỏi course xem bài còn sống hay không, nên dùng chung đúng repo đó.

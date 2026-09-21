@@ -45,6 +45,8 @@ paths:
                 $ref: '#/components/schemas/TokenPair'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -71,6 +73,8 @@ paths:
                 $ref: '#/components/schemas/TokenPair'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '409':
           $ref: '#/components/responses/Conflict'
 
@@ -104,6 +108,8 @@ paths:
                 $ref: '#/components/schemas/TokenPair'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '409':
@@ -1252,6 +1258,7 @@ components:
             - forbidden
             - not_found
             - conflict
+            - rate_limited
             - internal_error
         message:
           type: string
@@ -1346,6 +1353,19 @@ components:
             $ref: '#/components/schemas/DayActivity' 
 
   responses:
+    TooManyRequests:
+      description: Thử quá nhiều lần; header Retry-After cho biết phải chờ bao lâu.
+      headers:
+        Retry-After:
+          description: Số giây còn phải chờ.
+          schema:
+            type: integer
+            format: int32
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
     BadRequest:
       description: Dữ liệu vào không hợp lệ
       content:

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
 
 var (
@@ -29,6 +30,10 @@ var (
 
 	// ErrGoogleEmailUnverified: Google chưa xác minh email của tài khoản đó.
 	ErrGoogleEmailUnverified = errors.New("auth: google email not verified")
+
+	// ErrRateLimited: thử quá nhiều lần trong một khoảng thời gian ngắn. Dùng
+	// errors.As với *RateLimitedError để lấy thời gian phải chờ.
+	ErrRateLimited = errors.New("auth: too many attempts")
 
 	// ErrValidation: dữ liệu đăng ký không hợp lệ. Dùng errors.As với
 	// *ValidationError để lấy chi tiết từng field.
@@ -78,3 +83,14 @@ func (b *validationBuilder) err() error {
 	}
 	return &ValidationError{Fields: b.fields}
 }
+
+// RateLimitedError mang theo thời gian còn phải chờ để handler đặt Retry-After.
+type RateLimitedError struct {
+	RetryAfter time.Duration
+}
+
+func (e *RateLimitedError) Error() string {
+	return "auth: too many attempts, retry after " + e.RetryAfter.String()
+}
+
+func (e *RateLimitedError) Unwrap() error { return ErrRateLimited }

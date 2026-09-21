@@ -440,3 +440,65 @@ func TestLoginRejectsAnAccountWithoutAPassword(t *testing.T) {
 }
 
 func ptr[T any](value T) *T { return &value }
+
+func TestLoginRateLimitsPerEmail(t *testing.T) {
+	t.Parallel()
+
+	account := adminAccount(t)
+	users := &fakeUsers{
+		t:       t,
+		byEmail: func(context.Context, string) (user.User, error) { return account, nil },
+	}
+	service := newService(t, users, newFakeSessions(t))
+
+	for attempt := 1; attempt <= auth.LoginEmailRule.Limit; attempt++ {
+		_, err := service.Login(context.Background(), account.Email, "sai-mat-khau")
+		if !errors.Is(err, auth.ErrInvalidCredentials) {
+			t.Fatalf("lần %d: error = %v, want ErrInvalidCredentials", attempt, err)
+		}
+	}
+
+	_, err := service.Login(context.Background(), account.Email, "sai-mat-khau")
+
+	var limited *auth.RateLimitedError
+	if !errors.As(err, &limited) {
+		t.Fatalf("error = %v, want *RateLimitedError", err)
+	}
+	if limited.RetryAfter <= 0 {
+		t.Errorf("RetryAfter = %v, want lớn hơn 0", limited.RetryAfter)
+	}
+
+	// Đổi hoa thường không lách được hạn mức: khoá tính trên email đã chuẩn hoá.
+	if _, err := service.Login(context.Background(), "ADMIN@LINGORA.VN", "sai-mat-khau"); !errors.Is(err, auth.ErrRateLimited) {
+		t.Errorf("email viết hoa: error = %v, want vẫn bị chặn", err)
+	}
+}
+
+func TestLoginResetsTheLimitOnSuccess(t *testing.T) {
+	t.Parallel()
+
+	account := adminAccount(t)
+	users := &fakeUsers{
+		t:       t,
+		byEmail: func(context.Context, string) (user.User, error) { return account, nil },
+	}
+	service := newService(t, users, newFakeSessions(t))
+
+	// Gõ sai vài lần rồi gõ đúng: bộ đếm phải về 0, nếu không một người hay
+	// quên mật khẩu sẽ tự khoá mình ở lần đăng nhập sau.
+	for range auth.LoginEmailRule.Limit - 1 {
+		if _, err := service.Login(context.Background(), account.Email, "sai-mat-khau"); err == nil {
+			t.Fatal("Login() với mật khẩu sai lại thành công")
+		}
+	}
+	if _, err := service.Login(context.Background(), account.Email, servicePassword); err != nil {
+		t.Fatalf("Login() đúng mật khẩu returned error: %v", err)
+	}
+
+	for attempt := range auth.LoginEmailRule.Limit {
+		_, err := service.Login(context.Background(), account.Email, "sai-mat-khau")
+		if errors.Is(err, auth.ErrRateLimited) {
+			t.Fatalf("bị chặn lại ở lần %d sau khi đăng nhập thành công", attempt+1)
+		}
+	}
+}

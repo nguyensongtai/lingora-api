@@ -9,8 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/songtai/lingora/api/internal/db"
-	"github.com/songtai/lingora/api/internal/platform/postgres"
+	"github.com/nguyensongtai/lingora-api/internal/db"
+	"github.com/nguyensongtai/lingora-api/internal/platform/postgres"
 )
 
 // uniqueViolation là SQLSTATE cho vi phạm unique index.

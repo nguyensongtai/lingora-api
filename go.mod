@@ -1,4 +1,4 @@
-module github.com/songtai/lingora/api
+module github.com/nguyensongtai/lingora-api
 
 go 1.26.0
 

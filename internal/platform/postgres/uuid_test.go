@@ -5,7 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/songtai/lingora/api/internal/platform/postgres"
+	"github.com/nguyensongtai/lingora-api/internal/platform/postgres"
 )
 
 func TestParseUUIDRoundTrip(t *testing.T) {

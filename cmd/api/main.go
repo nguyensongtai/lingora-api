@@ -17,8 +17,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/songtai/lingora/api/internal/config"
-	"github.com/songtai/lingora/api/internal/platform/postgres"
+	"github.com/nguyensongtai/lingora-api/internal/config"
+	"github.com/nguyensongtai/lingora-api/internal/platform/postgres"
 )
 
 func main() {

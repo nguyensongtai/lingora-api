@@ -108,3 +108,16 @@ type Page struct {
 	Items      []Course
 	NextCursor *Cursor
 }
+
+// LessonCreateParams là dữ liệu đã hợp lệ để thêm một bài vào khoá.
+// Position không có ở đây: bài mới luôn đứng cuối.
+type LessonCreateParams struct {
+	Slug  string
+	Title string
+}
+
+// LessonUpdateParams là partial update; nil nghĩa là giữ nguyên.
+type LessonUpdateParams struct {
+	Slug  *string
+	Title *string
+}

@@ -17,6 +17,12 @@ var (
 	// ErrInvalidID: id truyền vào không phải UUID hợp lệ.
 	ErrInvalidID = errors.New("course: invalid id")
 
+	// ErrLessonNotFound: bài học không tồn tại hoặc đã bị xoá mềm.
+	ErrLessonNotFound = errors.New("course: lesson not found")
+
+	// ErrLessonSlugTaken: slug đã được một bài khác trong cùng khoá sử dụng.
+	ErrLessonSlugTaken = errors.New("course: lesson slug already taken")
+
 	// ErrValidation: dữ liệu đầu vào không hợp lệ. Dùng errors.As với
 	// *ValidationError để lấy chi tiết từng field.
 	ErrValidation = errors.New("course: validation failed")

@@ -11,6 +11,93 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createLesson = `-- name: CreateLesson :one
+INSERT INTO lessons (course_id, slug, title, position)
+VALUES (
+    $1,
+    $2,
+    $3,
+    COALESCE(
+        (
+            SELECT MAX(position) + 1 FROM lessons
+            WHERE course_id = $1 AND deleted_at IS NULL
+        ),
+        0
+    )
+)
+RETURNING id, course_id, slug, title, position, created_at, updated_at, deleted_at
+`
+
+type CreateLessonParams struct {
+	CourseID pgtype.UUID
+	Slug     string
+	Title    string
+}
+
+// Bài mới luôn đứng cuối khoá; thứ tự chỉ đổi được qua ReorderLessons.
+func (q *Queries) CreateLesson(ctx context.Context, arg CreateLessonParams) (Lesson, error) {
+	row := q.db.QueryRow(ctx, createLesson, arg.CourseID, arg.Slug, arg.Title)
+	var i Lesson
+	err := row.Scan(
+		&i.ID,
+		&i.CourseID,
+		&i.Slug,
+		&i.Title,
+		&i.Position,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getLessonByID = `-- name: GetLessonByID :one
+SELECT id, course_id, slug, title, position, created_at, updated_at, deleted_at FROM lessons
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetLessonByID(ctx context.Context, id pgtype.UUID) (Lesson, error) {
+	row := q.db.QueryRow(ctx, getLessonByID, id)
+	var i Lesson
+	err := row.Scan(
+		&i.ID,
+		&i.CourseID,
+		&i.Slug,
+		&i.Title,
+		&i.Position,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const listLessonIDsByCourse = `-- name: ListLessonIDsByCourse :many
+SELECT id FROM lessons
+WHERE course_id = $1 AND deleted_at IS NULL
+ORDER BY position ASC, id ASC
+`
+
+func (q *Queries) ListLessonIDsByCourse(ctx context.Context, courseID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listLessonIDsByCourse, courseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLessonsByCourse = `-- name: ListLessonsByCourse :many
 SELECT id, course_id, slug, title, position, created_at, updated_at, deleted_at FROM lessons
 WHERE course_id = $1 AND deleted_at IS NULL
@@ -44,4 +131,78 @@ func (q *Queries) ListLessonsByCourse(ctx context.Context, courseID pgtype.UUID)
 		return nil, err
 	}
 	return items, nil
+}
+
+const reorderLessons = `-- name: ReorderLessons :execrows
+UPDATE lessons AS l
+SET position = new_order.position, updated_at = now()
+FROM (
+    SELECT id, (ordinality - 1)::integer AS position
+    FROM unnest($2::uuid[]) WITH ORDINALITY AS t(id, ordinality)
+) AS new_order
+WHERE l.id = new_order.id
+  AND l.course_id = $1
+  AND l.deleted_at IS NULL
+`
+
+type ReorderLessonsParams struct {
+	CourseID  pgtype.UUID
+	LessonIds []pgtype.UUID
+}
+
+// Vị trí mới lấy từ chính thứ tự của mảng id truyền vào, nên toàn bộ khoá được
+// đánh lại số trong một câu lệnh, không có khoảng thời gian nào thứ tự bị lệch.
+func (q *Queries) ReorderLessons(ctx context.Context, arg ReorderLessonsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reorderLessons, arg.CourseID, arg.LessonIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const softDeleteLesson = `-- name: SoftDeleteLesson :execrows
+UPDATE lessons
+SET deleted_at = now(), updated_at = now()
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) SoftDeleteLesson(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteLesson, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateLesson = `-- name: UpdateLesson :one
+UPDATE lessons
+SET
+    slug       = COALESCE($1, slug),
+    title      = COALESCE($2, title),
+    updated_at = now()
+WHERE id = $3 AND deleted_at IS NULL
+RETURNING id, course_id, slug, title, position, created_at, updated_at, deleted_at
+`
+
+type UpdateLessonParams struct {
+	Slug  *string
+	Title *string
+	ID    pgtype.UUID
+}
+
+// position cố ý không nằm ở đây: đổi thứ tự là việc của ReorderLessons.
+func (q *Queries) UpdateLesson(ctx context.Context, arg UpdateLessonParams) (Lesson, error) {
+	row := q.db.QueryRow(ctx, updateLesson, arg.Slug, arg.Title, arg.ID)
+	var i Lesson
+	err := row.Scan(
+		&i.ID,
+		&i.CourseID,
+		&i.Slug,
+		&i.Title,
+		&i.Position,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
 }

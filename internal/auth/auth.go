@@ -20,9 +20,6 @@ const RoleAdmin = "admin"
 // minSecretLen giữ HS256 ở mức khoá đủ dài.
 const minSecretLen = 32
 
-// ErrWeakSecret: secret quá ngắn để ký HS256 an toàn.
-var ErrWeakSecret = errors.New("auth: jwt secret must be at least 32 bytes")
-
 // Claims là payload token mà API quan tâm.
 type Claims struct {
 	Subject string

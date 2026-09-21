@@ -23,6 +23,8 @@ import (
 	"github.com/nguyensongtai/lingora-api/internal/httpx"
 	"github.com/nguyensongtai/lingora-api/internal/platform/postgres"
 	"github.com/nguyensongtai/lingora-api/internal/progress"
+	"github.com/redis/go-redis/v9"
+
 	"github.com/nguyensongtai/lingora-api/internal/ratelimit"
 	"github.com/nguyensongtai/lingora-api/internal/user"
 	"github.com/nguyensongtai/lingora-api/internal/vocabulary"
@@ -62,7 +64,11 @@ func run() error {
 
 	// Dependency được nối tay theo mạch repo -> service -> handler.
 	// Một limiter dùng chung cho cả hạn mức theo IP lẫn theo email.
-	limiter := ratelimit.NewMemory()
+	limiter, closeLimiter, err := buildLimiter(ctx, cfg.RedisURL)
+	if err != nil {
+		return fmt.Errorf("build rate limiter: %w", err)
+	}
+	defer closeLimiter()
 
 	authConfig := auth.Config{
 		Limiter:    limiter,
@@ -155,6 +161,34 @@ func run() error {
 
 	slog.Info("api stopped")
 	return nil
+}
+
+// buildLimiter chọn kho đếm. Không có REDIS_URL thì lùi về bộ nhớ và nói rõ
+// giới hạn của nó trong log, thay vì im lặng để hạn mức nhân lên theo số
+// instance mà không ai biết.
+func buildLimiter(ctx context.Context, redisURL string) (ratelimit.Limiter, func(), error) {
+	if redisURL == "" {
+		slog.Warn("rate limiting uses in-process counters: REDIS_URL chưa được đặt, hạn mức sẽ nhân lên theo số instance")
+		return ratelimit.NewMemory(), func() {}, nil
+	}
+
+	options, err := redis.ParseURL(redisURL)
+	if err != nil {
+		return nil, nil, fmt.Errorf("parse REDIS_URL: %w", err)
+	}
+
+	client := redis.NewClient(options)
+	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	// Kiểm kết nối ngay lúc boot: một Redis sai địa chỉ phải làm hỏng lần khởi
+	// động, không phải hỏng lặng lẽ ở request đầu tiên có người đăng nhập.
+	if err := client.Ping(pingCtx).Err(); err != nil {
+		client.Close()
+		return nil, nil, fmt.Errorf("ping redis: %w", err)
+	}
+
+	slog.Info("rate limiting uses redis")
+	return ratelimit.NewRedis(client, "lingora:ratelimit:"), func() { client.Close() }, nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

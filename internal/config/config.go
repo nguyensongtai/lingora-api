@@ -28,6 +28,9 @@ type Config struct {
 	// dùng được, nên hai biến này không bắt buộc.
 	GoogleClientID     string
 	GoogleClientSecret string
+	// Để trống thì hạn mức đếm trong bộ nhớ của từng tiến trình — chỉ đúng khi
+	// chạy đúng một instance.
+	RedisURL string
 }
 
 // Load reads the configuration from the environment. Cloud Run injects PORT, so
@@ -42,6 +45,7 @@ func Load() (Config, error) {
 		ShutdownTimeout:    15 * time.Second,
 		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
 		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+		RedisURL:           os.Getenv("REDIS_URL"),
 	}
 
 	accessTTL, err := parseDuration("ACCESS_TOKEN_TTL", 15*time.Minute)

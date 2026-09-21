@@ -60,3 +60,8 @@ up: ## Start local Postgres and Redis
 .PHONY: down
 down: ## Stop local infrastructure
 	docker compose down
+
+.PHONY: test-integration
+## Chạy cả integration test; cần docker compose up trước.
+test-integration:
+	TEST_DATABASE_URL="$(DATABASE_URL)" REDIS_URL="$(REDIS_URL)" go test -race ./...

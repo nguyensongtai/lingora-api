@@ -14,6 +14,23 @@ jobs:
     runs-on: ubuntu-latest
 
     services:
+      # Integration test của tầng repo tự bỏ qua khi thiếu TEST_DATABASE_URL.
+      # Dựng PostgreSQL 18 ở đây — cùng phiên bản với production vì schema dùng
+      # uuidv7(), chỉ có từ 18 trở lên.
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: lingora
+          POSTGRES_PASSWORD: lingora
+          POSTGRES_DB: lingora_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
       # Test của limiter tự bỏ qua khi thiếu REDIS_URL. Dựng Redis ở đây để CI
       # chạy chúng thật thay vì lặng lẽ skip.
       redis:
@@ -53,3 +70,4 @@ jobs:
         run: go test -race ./...
         env:
           REDIS_URL: redis://localhost:6379/0
+          TEST_DATABASE_URL: postgres://lingora:lingora@localhost:5432/lingora_test?sslmode=disable

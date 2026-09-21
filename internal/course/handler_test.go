@@ -26,6 +26,14 @@ type fakeService struct {
 	updateFn      func(context.Context, string, course.UpdateParams) (course.Course, error)
 	deleteFn      func(context.Context, string) error
 	listLessonsFn func(context.Context, string) ([]course.Lesson, error)
+
+	createLessonFn   func(context.Context, string, course.LessonCreateParams) (course.Lesson, error)
+	getLessonFn      func(context.Context, string) (course.Lesson, error)
+	updateLessonFn   func(context.Context, string, course.LessonUpdateParams) (course.Lesson, error)
+	deleteLessonFn   func(context.Context, string) error
+	reorderLessonsFn func(context.Context, string, []string) error
+
+	reorderedIDs []string
 }
 
 func (f *fakeService) Create(ctx context.Context, params course.CreateParams) (course.Course, error) {
@@ -451,5 +459,134 @@ func TestGetBySlugUsesItsOwnRoute(t *testing.T) {
 	}
 	if got != "ngu-phap-co-ban" {
 		t.Errorf("slug = %q, want ngu-phap-co-ban", got)
+	}
+}
+
+func (f *fakeService) CreateLesson(ctx context.Context, courseID string, params course.LessonCreateParams) (course.Lesson, error) {
+	if f.createLessonFn == nil {
+		f.t.Fatal("CreateLesson called unexpectedly")
+	}
+	return f.createLessonFn(ctx, courseID, params)
+}
+
+func (f *fakeService) GetLesson(ctx context.Context, lessonID string) (course.Lesson, error) {
+	if f.getLessonFn == nil {
+		f.t.Fatal("GetLesson called unexpectedly")
+	}
+	return f.getLessonFn(ctx, lessonID)
+}
+
+func (f *fakeService) UpdateLesson(ctx context.Context, lessonID string, params course.LessonUpdateParams) (course.Lesson, error) {
+	if f.updateLessonFn == nil {
+		f.t.Fatal("UpdateLesson called unexpectedly")
+	}
+	return f.updateLessonFn(ctx, lessonID, params)
+}
+
+func (f *fakeService) DeleteLesson(ctx context.Context, lessonID string) error {
+	if f.deleteLessonFn == nil {
+		f.t.Fatal("DeleteLesson called unexpectedly")
+	}
+	return f.deleteLessonFn(ctx, lessonID)
+}
+
+func (f *fakeService) ReorderLessons(ctx context.Context, courseID string, lessonIDs []string) error {
+	f.reorderedIDs = lessonIDs
+	if f.reorderLessonsFn == nil {
+		f.t.Fatal("ReorderLessons called unexpectedly")
+	}
+	return f.reorderLessonsFn(ctx, courseID, lessonIDs)
+}
+
+func TestCreateLessonReturns201WithLocation(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeService{t: t, createLessonFn: func(context.Context, string, course.LessonCreateParams) (course.Lesson, error) {
+		return course.Lesson{ID: "lesson-1", CourseID: "course-1", Slug: "bai-1", Title: "Bài 1"}, nil
+	}}
+
+	recorder := do(t, svc, http.MethodPost, "/courses/course-1/lessons", `{"slug":"bai-1","title":"Bài 1"}`)
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201 (body: %s)", recorder.Code, recorder.Body.String())
+	}
+	if got := recorder.Header().Get("Location"); got != "/v1/lessons/lesson-1" {
+		t.Errorf("Location = %q, want /v1/lessons/lesson-1", got)
+	}
+}
+
+func TestLessonItemRoutesAreFlat(t *testing.T) {
+	t.Parallel()
+
+	t.Run("get", func(t *testing.T) {
+		t.Parallel()
+
+		var got string
+		svc := &fakeService{t: t, getLessonFn: func(_ context.Context, lessonID string) (course.Lesson, error) {
+			got = lessonID
+			return course.Lesson{ID: lessonID}, nil
+		}}
+
+		if recorder := do(t, svc, http.MethodGet, "/lessons/lesson-9", ""); recorder.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", recorder.Code)
+		}
+		if got != "lesson-9" {
+			t.Errorf("service received %q, want lesson-9", got)
+		}
+	})
+
+	t.Run("delete", func(t *testing.T) {
+		t.Parallel()
+
+		svc := &fakeService{t: t, deleteLessonFn: func(context.Context, string) error { return nil }}
+
+		if recorder := do(t, svc, http.MethodDelete, "/lessons/lesson-9", ""); recorder.Code != http.StatusNoContent {
+			t.Fatalf("status = %d, want 204", recorder.Code)
+		}
+	})
+}
+
+func TestReorderLessonsPassesTheOrderThrough(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeService{t: t, reorderLessonsFn: func(context.Context, string, []string) error { return nil }}
+
+	recorder := do(t, svc, http.MethodPut, "/courses/course-1/lessons/order",
+		`{"lesson_ids":["c","a","b"]}`)
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204 (body: %s)", recorder.Code, recorder.Body.String())
+	}
+	if len(svc.reorderedIDs) != 3 || svc.reorderedIDs[0] != "c" {
+		t.Errorf("service received %v, want the order preserved", svc.reorderedIDs)
+	}
+}
+
+func TestLessonErrorMapping(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		err        error
+		wantStatus int
+		wantCode   string
+	}{
+		"bài không tồn tại":     {course.ErrLessonNotFound, http.StatusNotFound, "not_found"},
+		"trùng slug trong khoá": {course.ErrLessonSlugTaken, http.StatusConflict, "conflict"},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			svc := &fakeService{t: t, getLessonFn: func(context.Context, string) (course.Lesson, error) {
+				return course.Lesson{}, tc.err
+			}}
+
+			recorder := do(t, svc, http.MethodGet, "/lessons/lesson-1", "")
+			if recorder.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d", recorder.Code, tc.wantStatus)
+			}
+			if code := decodeBody(t, recorder)["code"]; code != tc.wantCode {
+				t.Errorf("code = %v, want %q", code, tc.wantCode)
+			}
+		})
 	}
 }

@@ -26,6 +26,11 @@ type service interface {
 	Update(ctx context.Context, id string, params UpdateParams) (Course, error)
 	Delete(ctx context.Context, id string) error
 	ListLessons(ctx context.Context, courseID string) ([]Lesson, error)
+	CreateLesson(ctx context.Context, courseID string, params LessonCreateParams) (Lesson, error)
+	GetLesson(ctx context.Context, lessonID string) (Lesson, error)
+	UpdateLesson(ctx context.Context, lessonID string, params LessonUpdateParams) (Lesson, error)
+	DeleteLesson(ctx context.Context, lessonID string) error
+	ReorderLessons(ctx context.Context, courseID string, lessonIDs []string) error
 }
 
 // Handler ánh xạ HTTP sang nghiệp vụ khoá học.
@@ -44,13 +49,34 @@ func (h *Handler) Mount(r chi.Router, adminOnly func(http.Handler) http.Handler)
 		r.Get("/", h.list)
 		r.Get("/by-slug/{slug}", h.getBySlug)
 		r.Get("/{courseID}", h.get)
-		r.Get("/{courseID}/lessons", h.listLessons)
 
 		r.Group(func(r chi.Router) {
 			r.Use(adminOnly)
 			r.Post("/", h.create)
 			r.Patch("/{courseID}", h.update)
 			r.Delete("/{courseID}", h.delete)
+		})
+
+		// Bộ sưu tập bài học lồng dưới khoá.
+		r.Route("/{courseID}/lessons", func(r chi.Router) {
+			r.Get("/", h.listLessons)
+
+			r.Group(func(r chi.Router) {
+				r.Use(adminOnly)
+				r.Post("/", h.createLesson)
+				r.Put("/order", h.reorderLessons)
+			})
+		})
+	})
+
+	// Thao tác trên từng bài nằm phẳng: sửa hay xoá không cần biết khoá nào.
+	r.Route("/lessons", func(r chi.Router) {
+		r.Get("/{lessonID}", h.getLesson)
+
+		r.Group(func(r chi.Router) {
+			r.Use(adminOnly)
+			r.Patch("/{lessonID}", h.updateLesson)
+			r.Delete("/{lessonID}", h.deleteLesson)
 		})
 	})
 }
@@ -196,15 +222,7 @@ func (h *Handler) listLessons(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]api.Lesson, 0, len(lessons))
 	for _, lesson := range lessons {
-		items = append(items, api.Lesson{
-			Id:        lesson.ID,
-			CourseId:  lesson.CourseID,
-			Slug:      lesson.Slug,
-			Title:     lesson.Title,
-			Position:  lesson.Position,
-			CreatedAt: lesson.CreatedAt,
-			UpdatedAt: lesson.UpdatedAt,
-		})
+		items = append(items, toAPILesson(lesson))
 	}
 	httpx.JSON(w, http.StatusOK, api.LessonList{Items: items})
 }
@@ -305,6 +323,12 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		})
 	case errors.Is(err, ErrNotFound):
 		httpx.Error(w, http.StatusNotFound, httpx.CodeNotFound, "Không tìm thấy khoá học.", nil)
+	case errors.Is(err, ErrLessonNotFound):
+		httpx.Error(w, http.StatusNotFound, httpx.CodeNotFound, "Không tìm thấy bài học.", nil)
+	case errors.Is(err, ErrLessonSlugTaken):
+		httpx.Error(w, http.StatusConflict, httpx.CodeConflict, "Slug bài học đã được dùng trong khoá này.", map[string]string{
+			"slug": "đã tồn tại trong khoá",
+		})
 	case errors.Is(err, ErrSlugTaken):
 		httpx.Error(w, http.StatusConflict, httpx.CodeConflict, "Slug đã được sử dụng.", map[string]string{
 			"slug": "đã tồn tại",

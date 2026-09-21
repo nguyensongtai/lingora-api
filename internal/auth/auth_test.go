@@ -32,6 +32,14 @@ func adminClaims(expiry time.Time) jwt.MapClaims {
 	}
 }
 
+// okHandler trả về handler đánh dấu đã chạy và trả 200.
+func okHandler(reached *bool) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		*reached = true
+		w.WriteHeader(http.StatusOK)
+	})
+}
+
 // protected trả về handler đã bọc middleware, kèm cờ cho biết next có chạy không.
 func protected(t *testing.T) (http.Handler, *bool) {
 	t.Helper()

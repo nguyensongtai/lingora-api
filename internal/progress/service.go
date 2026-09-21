@@ -93,6 +93,7 @@ func (s *Service) Snapshot(ctx context.Context, userID string) (Snapshot, error)
 
 	today := s.today()
 	found.GoalXP = DefaultGoalXP
+	found.XPPerLesson = XPPerLesson
 	found.TodayXP = completionsOn(days, today) * XPPerLesson
 	found.StreakDays = streakEndingAt(days, today)
 	found.Week = weekEndingAt(days, today)

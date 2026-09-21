@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -69,10 +70,23 @@ func (h *Handler) snapshot(w http.ResponseWriter, r *http.Request) {
 		completed = []string{}
 	}
 
+	week := make([]api.DayActivity, 0, len(found.Week))
+	for _, day := range found.Week {
+		week = append(week, api.DayActivity{
+			Date:             day.Day.Format(time.DateOnly),
+			CompletedLessons: day.Completed,
+		})
+	}
+
 	writeJSON(w, r, http.StatusOK, api.ProgressSnapshot{
 		Courses:            courses,
 		CompletedLessonIds: completed,
 		LatestCourseId:     found.LatestCourseID,
+		TodayXp:            found.TodayXP,
+		GoalXp:             found.GoalXP,
+		XpPerLesson:        found.XPPerLesson,
+		StreakDays:         found.StreakDays,
+		Week:               week,
 	})
 }
 

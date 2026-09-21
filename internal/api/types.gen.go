@@ -178,6 +178,12 @@ type CourseUpdate struct {
 	Title  *string       `json:"title,omitempty"`
 }
 
+// DayActivity defines model for DayActivity.
+type DayActivity struct {
+	CompletedLessons int64  `json:"completed_lessons"`
+	Date             string `json:"date"`
+}
+
 // Error defines model for Error.
 type Error struct {
 	Code ErrorCode `json:"code"`
@@ -238,8 +244,25 @@ type ProgressSnapshot struct {
 	CompletedLessonIds []string         `json:"completed_lesson_ids"`
 	Courses            []CourseProgress `json:"courses"`
 
+	// GoalXp Mục tiêu XP mỗi ngày.
+	GoalXp int64 `json:"goal_xp"`
+
 	// LatestCourseId Khoá được học gần đây nhất; `null` khi chưa học bài nào.
 	LatestCourseId *string `json:"latest_course_id"`
+
+	// StreakDays Số ngày học liên tiếp. Vẫn giữ nguyên khi hôm nay chưa học nhưng
+	// hôm qua có — người học còn nguyên hôm nay để nối tiếp.
+	StreakDays int64 `json:"streak_days"`
+
+	// TodayXp XP đã đạt hôm nay, tính theo giờ Việt Nam.
+	TodayXp int64 `json:"today_xp"`
+
+	// Week Bảy ngày gần nhất, cũ trước mới sau; ngày không học vẫn có mặt.
+	Week []DayActivity `json:"week"`
+
+	// XpPerLesson XP cho mỗi bài hoàn thành. Có mặt để phía trước cộng trừ được ngay
+	// khi người học bấm, mà không phải viết cứng lại con số của server.
+	XpPerLesson int64 `json:"xp_per_lesson"`
 }
 
 // RefreshRequest defines model for RefreshRequest.

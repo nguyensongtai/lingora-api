@@ -27,9 +27,10 @@ type Snapshot struct {
 	LatestCourseID *string
 
 	// TodayXP và GoalXP tính bằng XP; StreakDays là số ngày học liên tiếp.
-	TodayXP    int64
-	GoalXP     int64
-	StreakDays int64
+	TodayXP     int64
+	GoalXP      int64
+	XPPerLesson int64
+	StreakDays  int64
 	// Week là bảy ngày gần nhất theo thứ tự cũ trước, mới sau.
 	Week []DayActivity
 }

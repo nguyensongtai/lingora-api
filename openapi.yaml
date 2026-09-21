@@ -858,9 +858,29 @@ components:
           type: integer
           format: int64
 
+    DayActivity:
+      type: object
+      required: [date, completed_lessons]
+      properties:
+        date:
+          type: string
+          format: date
+          x-go-type: string
+        completed_lessons:
+          type: integer
+          format: int64
+
     ProgressSnapshot:
       type: object
-      required: [courses, completed_lesson_ids, latest_course_id]
+      required:
+        - courses
+        - completed_lesson_ids
+        - latest_course_id
+        - today_xp
+        - goal_xp
+        - xp_per_lesson
+        - streak_days
+        - week
       properties:
         courses:
           type: array
@@ -879,6 +899,31 @@ components:
           nullable: true
           x-go-type: string
           description: Khoá được học gần đây nhất; `null` khi chưa học bài nào.
+        today_xp:
+          type: integer
+          format: int64
+          description: XP đã đạt hôm nay, tính theo giờ Việt Nam.
+        goal_xp:
+          type: integer
+          format: int64
+          description: Mục tiêu XP mỗi ngày.
+        xp_per_lesson:
+          type: integer
+          format: int64
+          description: |
+            XP cho mỗi bài hoàn thành. Có mặt để phía trước cộng trừ được ngay
+            khi người học bấm, mà không phải viết cứng lại con số của server.
+        streak_days:
+          type: integer
+          format: int64
+          description: |
+            Số ngày học liên tiếp. Vẫn giữ nguyên khi hôm nay chưa học nhưng
+            hôm qua có — người học còn nguyên hôm nay để nối tiếp.
+        week:
+          type: array
+          description: Bảy ngày gần nhất, cũ trước mới sau; ngày không học vẫn có mặt.
+          items:
+            $ref: '#/components/schemas/DayActivity' 
 
   responses:
     BadRequest:

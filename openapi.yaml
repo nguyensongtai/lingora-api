@@ -16,10 +16,101 @@ servers:
     description: Production
 
 tags:
+  - name: auth
+    description: Đăng nhập, làm mới phiên và đăng xuất
   - name: courses
     description: Khoá học và bài học thuộc khoá
 
 paths:
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Đăng nhập
+      description: |
+        Trả về access token JWT ngắn hạn và refresh token mờ. Sai email và sai
+        mật khẩu cho cùng một lỗi để không lộ email nào đang tồn tại.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Cặp token mới
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: Làm mới phiên
+      description: |
+        Xoay vòng token: refresh token gửi lên bị thu hồi ngay khi cặp mới được
+        cấp, nên mỗi refresh token chỉ dùng được đúng một lần.
+      operationId: refreshSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Cặp token mới
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Đăng xuất
+      description: Thu hồi refresh token. Gọi nhiều lần vẫn thành công.
+      operationId: logout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '204':
+          description: Đã đăng xuất
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: Thông tin tài khoản đang đăng nhập
+      operationId: getCurrentUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Tài khoản đang đăng nhập
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /courses:
     get:
       tags: [courses]
@@ -245,6 +336,67 @@ components:
         type: string
 
   schemas:
+    UserRole:
+      type: string
+      enum: [admin, student]
+
+    User:
+      type: object
+      required: [id, email, display_name, role, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          x-go-type: string
+        email:
+          type: string
+          format: email
+          x-go-type: string
+        display_name:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
+        created_at:
+          type: string
+          format: date-time
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          x-go-type: string
+        password:
+          type: string
+          format: password
+          minLength: 12
+
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+
+    TokenPair:
+      type: object
+      required: [access_token, refresh_token, expires_in, user]
+      properties:
+        access_token:
+          type: string
+          description: JWT HS256 dùng cho header Authorization.
+        refresh_token:
+          type: string
+          description: Chuỗi mờ, chỉ dùng được một lần.
+        expires_in:
+          type: integer
+          format: int64
+          description: Số giây còn hiệu lực của access token.
+        user:
+          $ref: '#/components/schemas/User'
+
     CourseLevel:
       type: string
       description: Trình độ theo khung CEFR.

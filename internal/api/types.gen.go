@@ -88,6 +88,24 @@ func (e ErrorCode) Valid() bool {
 	}
 }
 
+// Defines values for UserRole.
+const (
+	Admin   UserRole = "admin"
+	Student UserRole = "student"
+)
+
+// Valid indicates whether the value is a known member of the UserRole enum.
+func (e UserRole) Valid() bool {
+	switch e {
+	case Admin:
+		return true
+	case Student:
+		return true
+	default:
+		return false
+	}
+}
+
 // Course defines model for Course.
 type Course struct {
 	CoverImageUrl *string   `json:"cover_image_url"`
@@ -181,6 +199,42 @@ type LessonList struct {
 	Items []Lesson `json:"items"`
 }
 
+// LoginRequest defines model for LoginRequest.
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+// RefreshRequest defines model for RefreshRequest.
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+// TokenPair defines model for TokenPair.
+type TokenPair struct {
+	// AccessToken JWT HS256 dùng cho header Authorization.
+	AccessToken string `json:"access_token"`
+
+	// ExpiresIn Số giây còn hiệu lực của access token.
+	ExpiresIn int64 `json:"expires_in"`
+
+	// RefreshToken Chuỗi mờ, chỉ dùng được một lần.
+	RefreshToken string `json:"refresh_token"`
+	User         User   `json:"user"`
+}
+
+// User defines model for User.
+type User struct {
+	CreatedAt   time.Time `json:"created_at"`
+	DisplayName string    `json:"display_name"`
+	Email       string    `json:"email"`
+	Id          string    `json:"id"`
+	Role        UserRole  `json:"role"`
+}
+
+// UserRole defines model for UserRole.
+type UserRole string
+
 // CourseId defines model for CourseId.
 type CourseId = string
 
@@ -222,6 +276,15 @@ type ListCoursesParams struct {
 	// Cursor Chuỗi mờ lấy từ `next_cursor` của trang trước.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
+
+// LoginJSONRequestBody defines body for Login for application/json ContentType.
+type LoginJSONRequestBody = LoginRequest
+
+// LogoutJSONRequestBody defines body for Logout for application/json ContentType.
+type LogoutJSONRequestBody = RefreshRequest
+
+// RefreshSessionJSONRequestBody defines body for RefreshSession for application/json ContentType.
+type RefreshSessionJSONRequestBody = RefreshRequest
 
 // CreateCourseJSONRequestBody defines body for CreateCourse for application/json ContentType.
 type CreateCourseJSONRequestBody = CourseCreate

@@ -74,4 +74,9 @@ func TestDomainEnumsMatchSpecEnums(t *testing.T) {
 			t.Errorf("status %q có trong migration nhưng không có trong spec", status)
 		}
 	}
+	for _, role := range []string{"admin", "student"} {
+		if !api.UserRole(role).Valid() {
+			t.Errorf("role %q có trong migration nhưng không có trong spec", role)
+		}
+	}
 }

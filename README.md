@@ -14,6 +14,37 @@ make migrate-up                            # áp dụng migration
 make dev                                   # http://localhost:8080/healthz
 ```
 
+## API
+
+| Method | Route | Quyền |
+| --- | --- | --- |
+| `GET` | `/v1/courses` | công khai |
+| `GET` | `/v1/courses/{id}` | công khai |
+| `GET` | `/v1/courses/by-slug/{slug}` | công khai |
+| `GET` | `/v1/courses/{id}/lessons` | công khai |
+| `POST` | `/v1/courses` | `Bearer` token role `admin` |
+| `PATCH` | `/v1/courses/{id}` | `Bearer` token role `admin` |
+| `DELETE` | `/v1/courses/{id}` | `Bearer` token role `admin` |
+
+`GET /v1/courses` nhận `status`, `level`, `page_size` (mặc định 20, trần 100) và
+`cursor`. Con trỏ là chuỗi mờ base64url, lấy từ `next_cursor` của trang trước.
+
+Mọi lỗi dùng chung một body:
+
+```json
+{ "code": "validation_error", "message": "Dữ liệu không hợp lệ.", "details": { "slug": "không được rỗng" } }
+```
+
+| Code | HTTP |
+| --- | --- |
+| `validation_error` | 400 |
+| `malformed_body` | 400 |
+| `unauthorized` | 401 |
+| `forbidden` | 403 |
+| `not_found` | 404 |
+| `conflict` | 409 |
+| `internal_error` | 500 |
+
 ## Layout
 
 ```

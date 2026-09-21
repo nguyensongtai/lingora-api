@@ -17,7 +17,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/nguyensongtai/lingora-api/internal/auth"
 	"github.com/nguyensongtai/lingora-api/internal/config"
+	"github.com/nguyensongtai/lingora-api/internal/course"
+	"github.com/nguyensongtai/lingora-api/internal/httpx"
 	"github.com/nguyensongtai/lingora-api/internal/platform/postgres"
 )
 
@@ -42,11 +45,19 @@ func run() error {
 		Level: cfg.LogLevel,
 	})))
 
+	verifier, err := auth.NewVerifier(cfg.JWTSecret)
+	if err != nil {
+		return fmt.Errorf("build token verifier: %w", err)
+	}
+
 	pool, err := postgres.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("connect postgres: %w", err)
 	}
 	defer pool.Close()
+
+	// Dependency được nối tay theo mạch repo -> service -> handler.
+	courseHandler := course.NewHandler(course.NewService(course.NewRepo(pool)))
 
 	router := chi.NewRouter()
 	router.Use(
@@ -54,6 +65,7 @@ func run() error {
 		middleware.RealIP,
 		middleware.Recoverer,
 		middleware.Timeout(30*time.Second),
+		httpx.CORS(cfg.CORSAllowedOrigins),
 	)
 
 	router.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -66,6 +78,10 @@ func run() error {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
+
+	router.Route("/v1", func(r chi.Router) {
+		courseHandler.Mount(r, verifier.RequireRole(auth.RoleAdmin))
 	})
 
 	srv := &http.Server{

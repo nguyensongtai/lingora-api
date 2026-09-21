@@ -1,0 +1,106 @@
+// Package auth xác thực JWT và kiểm tra quyền cho các route ghi.
+package auth
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"strings"
+
+	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/nguyensongtai/lingora-api/internal/httpx"
+)
+
+// RoleAdmin là quyền bắt buộc cho mọi thao tác ghi nội dung.
+const RoleAdmin = "admin"
+
+// minSecretLen giữ HS256 ở mức khoá đủ dài.
+const minSecretLen = 32
+
+// ErrWeakSecret: secret quá ngắn để ký HS256 an toàn.
+var ErrWeakSecret = errors.New("auth: jwt secret must be at least 32 bytes")
+
+// Claims là payload token mà API quan tâm.
+type Claims struct {
+	Subject string
+	Role    string
+}
+
+type tokenClaims struct {
+	Role string `json:"role"`
+	jwt.RegisteredClaims
+}
+
+type contextKey struct{}
+
+// Verifier kiểm tra chữ ký HS256 của access token.
+type Verifier struct {
+	secret []byte
+}
+
+// NewVerifier từ chối secret yếu ngay lúc boot thay vì lúc có request đầu tiên.
+func NewVerifier(secret string) (*Verifier, error) {
+	if len(secret) < minSecretLen {
+		return nil, fmt.Errorf("%w (got %d)", ErrWeakSecret, len(secret))
+	}
+	return &Verifier{secret: []byte(secret)}, nil
+}
+
+// RequireRole trả về middleware bắt buộc token hợp lệ và đúng role.
+func (v *Verifier) RequireRole(role string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			raw, err := bearerToken(r)
+			if err != nil {
+				httpx.Error(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "Thiếu access token hợp lệ.", nil)
+				return
+			}
+
+			claims, err := v.parse(raw)
+			if err != nil {
+				// Lý do cụ thể chỉ ghi log, không trả cho client.
+				slog.WarnContext(r.Context(), "reject access token", slog.Any("error", err))
+				httpx.Error(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "Access token không hợp lệ hoặc đã hết hạn.", nil)
+				return
+			}
+
+			if claims.Role != role {
+				httpx.Error(w, http.StatusForbidden, httpx.CodeForbidden, "Tài khoản không có quyền thực hiện thao tác này.", nil)
+				return
+			}
+
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), contextKey{}, claims)))
+		})
+	}
+}
+
+// ClaimsFrom lấy claims mà middleware đã gắn vào context.
+func ClaimsFrom(ctx context.Context) (Claims, bool) {
+	claims, ok := ctx.Value(contextKey{}).(Claims)
+	return claims, ok
+}
+
+func (v *Verifier) parse(raw string) (Claims, error) {
+	var parsed tokenClaims
+
+	// Chỉ chấp nhận HS256: khoá alg mở là lỗ hổng kinh điển của JWT.
+	if _, err := jwt.ParseWithClaims(raw, &parsed, func(*jwt.Token) (any, error) {
+		return v.secret, nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired()); err != nil {
+		return Claims{}, fmt.Errorf("parse token: %w", err)
+	}
+
+	return Claims{Subject: parsed.Subject, Role: parsed.Role}, nil
+}
+
+func bearerToken(r *http.Request) (string, error) {
+	header := r.Header.Get("Authorization")
+	scheme, token, found := strings.Cut(header, " ")
+	if !found || !strings.EqualFold(scheme, "bearer") || strings.TrimSpace(token) == "" {
+		return "", errors.New("auth: missing bearer token")
+	}
+	return strings.TrimSpace(token), nil
+}

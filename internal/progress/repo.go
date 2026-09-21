@@ -110,6 +110,29 @@ func (r *Repo) Snapshot(ctx context.Context, userID string) (Snapshot, error) {
 	return snapshot, nil
 }
 
+// DailyActivity trả về số bài hoàn thành theo từng ngày, mới nhất trước. Việc
+// biến nó thành XP, chuỗi ngày hay bảy chấm trong tuần là của service.
+func (r *Repo) DailyActivity(ctx context.Context, userID string) ([]DayActivity, error) {
+	user, err := parseID(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := r.q.ListDailyCompletions(ctx, user)
+	if err != nil {
+		return nil, fmt.Errorf("list daily completions of %s: %w", userID, err)
+	}
+
+	days := make([]DayActivity, 0, len(rows))
+	for _, row := range rows {
+		if !row.Day.Valid {
+			continue
+		}
+		days = append(days, DayActivity{Day: row.Day.Time, Completed: row.Completions})
+	}
+	return days, nil
+}
+
 func parseID(raw string) (pgtype.UUID, error) {
 	id, err := postgres.ParseUUID(raw)
 	if err != nil {

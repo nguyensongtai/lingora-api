@@ -124,6 +124,49 @@ func (q *Queries) ListCourseProgress(ctx context.Context, userID pgtype.UUID) ([
 	return items, nil
 }
 
+const listDailyCompletions = `-- name: ListDailyCompletions :many
+SELECT
+    (p.completed_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date AS day,
+    count(*)::bigint AS completions
+FROM lesson_progress AS p
+JOIN lessons AS l ON l.id = p.lesson_id
+JOIN courses AS c ON c.id = l.course_id
+WHERE p.user_id = $1
+  AND l.deleted_at IS NULL
+  AND c.deleted_at IS NULL
+GROUP BY 1
+ORDER BY 1 DESC
+LIMIT 400
+`
+
+type ListDailyCompletionsRow struct {
+	Day         pgtype.Date
+	Completions int64
+}
+
+// Gom số bài hoàn thành theo ngày ở múi giờ Việt Nam. XP hôm nay, chuỗi ngày
+// liên tiếp và bảy chấm trong tuần đều suy ra từ đúng bảng này, nên không có
+// con số nào phải giữ đồng bộ bằng tay.
+func (q *Queries) ListDailyCompletions(ctx context.Context, userID pgtype.UUID) ([]ListDailyCompletionsRow, error) {
+	rows, err := q.db.Query(ctx, listDailyCompletions, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDailyCompletionsRow{}
+	for rows.Next() {
+		var i ListDailyCompletionsRow
+		if err := rows.Scan(&i.Day, &i.Completions); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const uncompleteLesson = `-- name: UncompleteLesson :execrows
 DELETE FROM lesson_progress
 WHERE user_id = $1

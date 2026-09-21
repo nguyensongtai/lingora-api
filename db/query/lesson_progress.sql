@@ -48,3 +48,20 @@ WHERE p.user_id = sqlc.arg('user_id')
   AND c.deleted_at IS NULL
 ORDER BY p.completed_at DESC
 LIMIT 1;
+
+-- name: ListDailyCompletions :many
+-- Gom số bài hoàn thành theo ngày ở múi giờ Việt Nam. XP hôm nay, chuỗi ngày
+-- liên tiếp và bảy chấm trong tuần đều suy ra từ đúng bảng này, nên không có
+-- con số nào phải giữ đồng bộ bằng tay.
+SELECT
+    (p.completed_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date AS day,
+    count(*)::bigint AS completions
+FROM lesson_progress AS p
+JOIN lessons AS l ON l.id = p.lesson_id
+JOIN courses AS c ON c.id = l.course_id
+WHERE p.user_id = sqlc.arg('user_id')
+  AND l.deleted_at IS NULL
+  AND c.deleted_at IS NULL
+GROUP BY 1
+ORDER BY 1 DESC
+LIMIT 400;

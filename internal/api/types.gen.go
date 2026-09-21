@@ -198,6 +198,15 @@ type Error struct {
 // ErrorCode defines model for Error.Code.
 type ErrorCode string
 
+// GoogleSignInRequest defines model for GoogleSignInRequest.
+type GoogleSignInRequest struct {
+	// Code Authorization code Google trả về.
+	Code string `json:"code"`
+
+	// RedirectUri Đúng redirect_uri đã dùng ở bước chuyển hướng.
+	RedirectUri string `json:"redirect_uri"`
+}
+
 // Lesson defines model for Lesson.
 type Lesson struct {
 	CourseId  string    `json:"course_id"`
@@ -345,6 +354,9 @@ type ListCoursesParams struct {
 	// Cursor Chuỗi mờ lấy từ `next_cursor` của trang trước.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
+
+// SignInWithGoogleJSONRequestBody defines body for SignInWithGoogle for application/json ContentType.
+type SignInWithGoogleJSONRequestBody = GoogleSignInRequest
 
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest

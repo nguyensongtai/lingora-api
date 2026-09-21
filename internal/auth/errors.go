@@ -21,6 +21,15 @@ var (
 	// ErrInvalidUserID: id người dùng không phải UUID hợp lệ.
 	ErrInvalidUserID = errors.New("auth: invalid user id")
 
+	// ErrGoogleNotConfigured: chưa đặt GOOGLE_CLIENT_ID/SECRET nên tính năng tắt.
+	ErrGoogleNotConfigured = errors.New("auth: google sign-in is not configured")
+
+	// ErrGoogleExchangeFailed: Google từ chối code, hoặc token trả về không hợp lệ.
+	ErrGoogleExchangeFailed = errors.New("auth: google exchange failed")
+
+	// ErrGoogleEmailUnverified: Google chưa xác minh email của tài khoản đó.
+	ErrGoogleEmailUnverified = errors.New("auth: google email not verified")
+
 	// ErrValidation: dữ liệu đăng ký không hợp lệ. Dùng errors.As với
 	// *ValidationError để lấy chi tiết từng field.
 	ErrValidation = errors.New("auth: validation failed")

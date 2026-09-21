@@ -25,6 +25,14 @@ type users interface {
 	Create(ctx context.Context, params user.CreateParams) (user.User, error)
 	GetByEmail(ctx context.Context, email string) (user.User, error)
 	GetByID(ctx context.Context, id string) (user.User, error)
+	GetByGoogleSub(ctx context.Context, googleSub string) (user.User, error)
+	LinkGoogle(ctx context.Context, id, googleSub string) (user.User, error)
+}
+
+// googleExchanger đổi authorization code lấy danh tính. Khai báo ở phía
+// consumer nên GoogleClient không phải biết đến nó; nil nghĩa là tính năng tắt.
+type googleExchanger interface {
+	Exchange(ctx context.Context, code, redirectURI string) (GoogleIdentity, error)
 }
 
 // sessions là những gì Service cần ở kho phiên đăng nhập.
@@ -47,6 +55,7 @@ type TokenPair struct {
 type Service struct {
 	users      users
 	sessions   sessions
+	google     googleExchanger
 	secret     []byte
 	accessTTL  time.Duration
 	refreshTTL time.Duration
@@ -60,6 +69,8 @@ type Config struct {
 	Secret     string
 	AccessTTL  time.Duration
 	RefreshTTL time.Duration
+	// Google để nil thì đăng nhập Google tắt, và endpoint trả 503.
+	Google googleExchanger
 }
 
 // NewService từ chối secret yếu ngay lúc boot.
@@ -70,6 +81,7 @@ func NewService(userRepo users, sessionRepo sessions, cfg Config) (*Service, err
 	return &Service{
 		users:      userRepo,
 		sessions:   sessionRepo,
+		google:     cfg.Google,
 		secret:     []byte(cfg.Secret),
 		accessTTL:  cfg.AccessTTL,
 		refreshTTL: cfg.RefreshTTL,
@@ -153,6 +165,83 @@ func (s *Service) Login(ctx context.Context, email, password string) (TokenPair,
 	}
 
 	return s.issue(ctx, found)
+}
+
+// GoogleEnabled cho biết endpoint đăng nhập Google có dùng được hay không.
+func (s *Service) GoogleEnabled() bool { return s.google != nil }
+
+// SignInWithGoogle đổi authorization code lấy phiên đăng nhập.
+//
+// Ba nhánh, theo thứ tự: đã gắn Google thì vào thẳng; có tài khoản cùng email
+// thì gắn thêm Google vào đó; chưa có gì thì tạo tài khoản mới không mật khẩu.
+//
+// Nhánh giữa chỉ chạy khi Google đã xác minh email — nếu không, bất kỳ ai tạo
+// được một tài khoản Google mang email của người khác sẽ chiếm được tài khoản
+// Lingora của họ.
+func (s *Service) SignInWithGoogle(ctx context.Context, code, redirectURI string) (TokenPair, error) {
+	if s.google == nil {
+		return TokenPair{}, ErrGoogleNotConfigured
+	}
+
+	var v validationBuilder
+	if strings.TrimSpace(code) == "" {
+		v.add("code", "không được rỗng")
+	}
+	if strings.TrimSpace(redirectURI) == "" {
+		v.add("redirect_uri", "không được rỗng")
+	}
+	if err := v.err(); err != nil {
+		return TokenPair{}, err
+	}
+
+	identity, err := s.google.Exchange(ctx, code, redirectURI)
+	if err != nil {
+		return TokenPair{}, fmt.Errorf("google sign-in: %w", err)
+	}
+	if !identity.EmailVerified {
+		return TokenPair{}, ErrGoogleEmailUnverified
+	}
+
+	linked, err := s.users.GetByGoogleSub(ctx, identity.Subject)
+	switch {
+	case err == nil:
+		return s.issue(ctx, linked)
+	case !errors.Is(err, user.ErrNotFound):
+		return TokenPair{}, fmt.Errorf("google sign-in: %w", err)
+	}
+
+	existing, err := s.users.GetByEmail(ctx, identity.Email)
+	switch {
+	case err == nil:
+		attached, linkErr := s.users.LinkGoogle(ctx, existing.ID, identity.Subject)
+		if linkErr != nil {
+			return TokenPair{}, fmt.Errorf("google sign-in: %w", linkErr)
+		}
+		return s.issue(ctx, attached)
+	case !errors.Is(err, user.ErrNotFound):
+		return TokenPair{}, fmt.Errorf("google sign-in: %w", err)
+	}
+
+	created, err := s.users.Create(ctx, user.CreateParams{
+		Email:       identity.Email,
+		DisplayName: displayNameFor(identity),
+		Role:        user.RoleStudent,
+		GoogleSub:   &identity.Subject,
+	})
+	if err != nil {
+		return TokenPair{}, fmt.Errorf("google sign-in: %w", err)
+	}
+	return s.issue(ctx, created)
+}
+
+// displayNameFor lấy tên Google trả về; tài khoản không đặt tên thì lùi về
+// phần trước @ của email, vì giao diện luôn cần một cái tên để hiển thị.
+func displayNameFor(identity GoogleIdentity) string {
+	if name := strings.TrimSpace(identity.Name); name != "" {
+		return name
+	}
+	local, _, _ := strings.Cut(identity.Email, "@")
+	return local
 }
 
 // Refresh xoay vòng phiên: token cũ bị thu hồi ngay khi token mới được cấp, nên

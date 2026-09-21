@@ -24,6 +24,10 @@ type Config struct {
 	RefreshTokenTTL    time.Duration
 	LogLevel           slog.Level
 	ShutdownTimeout    time.Duration
+	// Để trống thì đăng nhập bằng Google tắt. Không có giá trị mặc định nào
+	// dùng được, nên hai biến này không bắt buộc.
+	GoogleClientID     string
+	GoogleClientSecret string
 }
 
 // Load reads the configuration from the environment. Cloud Run injects PORT, so
@@ -36,6 +40,8 @@ func Load() (Config, error) {
 		JWTSecret:          os.Getenv("JWT_SECRET"),
 		CORSAllowedOrigins: splitList(lookup("CORS_ALLOWED_ORIGINS", "http://localhost:3000")),
 		ShutdownTimeout:    15 * time.Second,
+		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
 	}
 
 	accessTTL, err := parseDuration("ACCESS_TOKEN_TTL", 15*time.Minute)

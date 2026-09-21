@@ -59,11 +59,24 @@ func run() error {
 	defer pool.Close()
 
 	// Dependency được nối tay theo mạch repo -> service -> handler.
-	authService, err := auth.NewService(user.NewRepo(pool), auth.NewSessionRepo(pool), auth.Config{
+	authConfig := auth.Config{
 		Secret:     cfg.JWTSecret,
 		AccessTTL:  cfg.AccessTokenTTL,
 		RefreshTTL: cfg.RefreshTokenTTL,
-	})
+	}
+	// Thiếu client id hoặc secret thì để nil: endpoint Google trả 503 chứ không
+	// chạy nửa vời với cấu hình rỗng.
+	googleConfig := auth.GoogleConfig{
+		ClientID:     cfg.GoogleClientID,
+		ClientSecret: cfg.GoogleClientSecret,
+	}
+	if googleConfig.Configured() {
+		authConfig.Google = auth.NewGoogleClient(googleConfig)
+	} else {
+		slog.Warn("google sign-in disabled: GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET chưa được đặt")
+	}
+
+	authService, err := auth.NewService(user.NewRepo(pool), auth.NewSessionRepo(pool), authConfig)
 	if err != nil {
 		return fmt.Errorf("build auth service: %w", err)
 	}

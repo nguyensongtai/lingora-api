@@ -13,9 +13,25 @@ import (
 type fakeUsers struct {
 	t *testing.T
 
-	create  func(context.Context, user.CreateParams) (user.User, error)
-	byEmail func(context.Context, string) (user.User, error)
-	byID    func(context.Context, string) (user.User, error)
+	create     func(context.Context, user.CreateParams) (user.User, error)
+	byEmail    func(context.Context, string) (user.User, error)
+	byID       func(context.Context, string) (user.User, error)
+	byGoogle   func(context.Context, string) (user.User, error)
+	linkGoogle func(context.Context, string, string) (user.User, error)
+}
+
+func (f *fakeUsers) GetByGoogleSub(ctx context.Context, googleSub string) (user.User, error) {
+	if f.byGoogle == nil {
+		return user.User{}, user.ErrNotFound
+	}
+	return f.byGoogle(ctx, googleSub)
+}
+
+func (f *fakeUsers) LinkGoogle(ctx context.Context, id, googleSub string) (user.User, error) {
+	if f.linkGoogle == nil {
+		f.t.Fatal("LinkGoogle called unexpectedly")
+	}
+	return f.linkGoogle(ctx, id, googleSub)
 }
 
 func (f *fakeUsers) Create(ctx context.Context, params user.CreateParams) (user.User, error) {

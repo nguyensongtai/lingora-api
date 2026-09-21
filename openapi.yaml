@@ -74,6 +74,47 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
 
+  /auth/google:
+    post:
+      tags: [auth]
+      summary: Đăng nhập bằng Google
+      description: |
+        Đổi authorization code của Google lấy phiên Lingora. `redirect_uri` phải
+        khớp với cái đã dùng lúc chuyển hướng sang Google.
+
+        Tài khoản Google đã gắn thì đăng nhập thẳng; chưa gắn mà email đã có
+        tài khoản Lingora thì được gắn vào tài khoản đó; chưa có gì thì tạo mới
+        với vai trò `student`. Email chưa được Google xác minh bị từ chối.
+
+        Trả 503 khi máy chủ chưa được cấu hình GOOGLE_CLIENT_ID và
+        GOOGLE_CLIENT_SECRET.
+      operationId: signInWithGoogle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoogleSignInRequest'
+      responses:
+        '200':
+          description: Phiên đăng nhập
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: Đăng nhập Google chưa được bật trên máy chủ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /auth/refresh:
     post:
       tags: [auth]
@@ -606,6 +647,17 @@ components:
         display_name:
           type: string
           maxLength: 100
+
+    GoogleSignInRequest:
+      type: object
+      required: [code, redirect_uri]
+      properties:
+        code:
+          type: string
+          description: Authorization code Google trả về.
+        redirect_uri:
+          type: string
+          description: Đúng redirect_uri đã dùng ở bước chuyển hướng.
 
     LoginRequest:
       type: object

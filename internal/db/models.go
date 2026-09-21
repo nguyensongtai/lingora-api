@@ -100,6 +100,48 @@ func (ns NullCourseStatus) Value() (driver.Value, error) {
 	return string(ns.CourseStatus), nil
 }
 
+type UserRole string
+
+const (
+	UserRoleAdmin   UserRole = "admin"
+	UserRoleStudent UserRole = "student"
+)
+
+func (e *UserRole) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = UserRole(s)
+	case string:
+		*e = UserRole(s)
+	default:
+		return fmt.Errorf("unsupported scan type for UserRole: %T", src)
+	}
+	return nil
+}
+
+type NullUserRole struct {
+	UserRole UserRole
+	Valid    bool // Valid is true if UserRole is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullUserRole) Scan(value interface{}) error {
+	if value == nil {
+		ns.UserRole, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.UserRole.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullUserRole) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.UserRole), nil
+}
+
 type Course struct {
 	ID            pgtype.UUID
 	Slug          string
@@ -122,4 +164,24 @@ type Lesson struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DeletedAt *time.Time
+}
+
+type RefreshToken struct {
+	ID        pgtype.UUID
+	UserID    pgtype.UUID
+	TokenHash []byte
+	ExpiresAt time.Time
+	RevokedAt *time.Time
+	CreatedAt time.Time
+}
+
+type User struct {
+	ID           pgtype.UUID
+	Email        string
+	PasswordHash string
+	DisplayName  string
+	Role         UserRole
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	DeletedAt    *time.Time
 }

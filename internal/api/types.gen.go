@@ -194,9 +194,27 @@ type Lesson struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// LessonCreate defines model for LessonCreate.
+type LessonCreate struct {
+	Slug  string `json:"slug"`
+	Title string `json:"title"`
+}
+
 // LessonList defines model for LessonList.
 type LessonList struct {
 	Items []Lesson `json:"items"`
+}
+
+// LessonOrder defines model for LessonOrder.
+type LessonOrder struct {
+	// LessonIds Toàn bộ id bài của khoá, theo thứ tự mong muốn.
+	LessonIds []string `json:"lesson_ids"`
+}
+
+// LessonUpdate defines model for LessonUpdate.
+type LessonUpdate struct {
+	Slug  *string `json:"slug,omitempty"`
+	Title *string `json:"title,omitempty"`
 }
 
 // LoginRequest defines model for LoginRequest.
@@ -291,3 +309,12 @@ type CreateCourseJSONRequestBody = CourseCreate
 
 // UpdateCourseJSONRequestBody defines body for UpdateCourse for application/json ContentType.
 type UpdateCourseJSONRequestBody = CourseUpdate
+
+// CreateLessonJSONRequestBody defines body for CreateLesson for application/json ContentType.
+type CreateLessonJSONRequestBody = LessonCreate
+
+// ReorderLessonsJSONRequestBody defines body for ReorderLessons for application/json ContentType.
+type ReorderLessonsJSONRequestBody = LessonOrder
+
+// UpdateLessonJSONRequestBody defines body for UpdateLesson for application/json ContentType.
+type UpdateLessonJSONRequestBody = LessonUpdate

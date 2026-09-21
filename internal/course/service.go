@@ -35,6 +35,8 @@ type repository interface {
 	Update(ctx context.Context, id string, params UpdateParams) (Course, error)
 	SoftDelete(ctx context.Context, id string) error
 	Exists(ctx context.Context, id string) (bool, error)
+	ListIDsByLevel(ctx context.Context, level Level) ([]string, error)
+	ReorderCourses(ctx context.Context, level Level, courseIDs []string) (int64, error)
 	ListLessons(ctx context.Context, courseID string) ([]Lesson, error)
 	CreateLesson(ctx context.Context, courseID string, params LessonCreateParams) (Lesson, error)
 	GetLesson(ctx context.Context, lessonID string) (Lesson, error)
@@ -281,4 +283,29 @@ func trimLowerOptional(value *string) *string {
 	}
 	trimmed := strings.ToLower(strings.TrimSpace(*value))
 	return &trimmed
+}
+
+// ReorderCourses đặt lại thứ tự khoá trong một bậc. Danh sách gửi lên phải là
+// đúng tập khoá hiện có của bậc đó: thiếu, thừa hay trùng đều bị từ chối, vì
+// một lần sắp xếp thiếu khoá sẽ để lại những khoá mang position cũ lẫn vào giữa.
+func (s *Service) ReorderCourses(ctx context.Context, level Level, courseIDs []string) error {
+	if !level.Valid() {
+		var v validationBuilder
+		v.add("level", "phải là một bậc CEFR hợp lệ")
+		return v.err()
+	}
+
+	current, err := s.repo.ListIDsByLevel(ctx, level)
+	if err != nil {
+		return fmt.Errorf("reorder courses: %w", err)
+	}
+
+	if err := checkSameIDSet(current, courseIDs, "course_ids", "khoá"); err != nil {
+		return err
+	}
+
+	if _, err := s.repo.ReorderCourses(ctx, level, courseIDs); err != nil {
+		return fmt.Errorf("reorder courses: %w", err)
+	}
+	return nil
 }

@@ -31,6 +31,7 @@ type service interface {
 	UpdateLesson(ctx context.Context, lessonID string, params LessonUpdateParams) (Lesson, error)
 	DeleteLesson(ctx context.Context, lessonID string) error
 	ReorderLessons(ctx context.Context, courseID string, lessonIDs []string) error
+	ReorderCourses(ctx context.Context, level Level, courseIDs []string) error
 }
 
 // Handler ánh xạ HTTP sang nghiệp vụ khoá học.
@@ -53,6 +54,9 @@ func (h *Handler) Mount(r chi.Router, adminOnly func(http.Handler) http.Handler)
 		r.Group(func(r chi.Router) {
 			r.Use(adminOnly)
 			r.Post("/", h.create)
+			// Đặt trước /{courseID} là thừa với chi (nó khớp literal trước
+			// param), nhưng để cạnh nhau cho dễ đọc.
+			r.Put("/order", h.reorderCourses)
 			r.Patch("/{courseID}", h.update)
 			r.Delete("/{courseID}", h.delete)
 		})
@@ -99,6 +103,20 @@ type updateCourseRequest struct {
 }
 
 /* ---------- handler ---------- */
+
+func (h *Handler) reorderCourses(w http.ResponseWriter, r *http.Request) {
+	var body api.CourseOrder
+	if err := httpx.DecodeJSON(w, r, &body); err != nil {
+		writeMalformed(w, err)
+		return
+	}
+
+	if err := h.service.ReorderCourses(r.Context(), Level(body.Level), body.CourseIds); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var body api.CourseCreate
@@ -297,6 +315,7 @@ func toAPICourse(item Course) api.Course {
 		Description:   item.Description,
 		Level:         api.CourseLevel(item.Level),
 		Status:        api.CourseStatus(item.Status),
+		Position:      item.Position,
 		CoverImageUrl: item.CoverImageURL,
 		CreatedAt:     item.CreatedAt,
 		UpdatedAt:     item.UpdatedAt,

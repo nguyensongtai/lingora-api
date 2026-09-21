@@ -250,3 +250,102 @@ func TestRepoLessonSlugIsUniquePerCourse(t *testing.T) {
 }
 
 func strptr(value string) *string { return &value }
+
+func TestRepoCoursePositionsAreScopedToTheLevel(t *testing.T) {
+	t.Parallel()
+
+	repo, _ := newRepo(t)
+	ctx := context.Background()
+
+	create := func(slug string, level course.Level) course.Course {
+		t.Helper()
+
+		created, err := repo.Create(ctx, course.CreateParams{
+			Slug: slug, Title: slug, Level: level, Status: course.StatusDraft,
+		})
+		if err != nil {
+			t.Fatalf("Create() returned error: %v", err)
+		}
+		return created
+	}
+
+	// Bậc A1 đã có khoá sẵn trong database, nên chỉ so tương đối giữa hai khoá
+	// mới tạo chứ không so với một con số tuyệt đối.
+	firstA1 := create("vi-tri-a1-mot", course.LevelA1)
+	secondA1 := create("vi-tri-a1-hai", course.LevelA1)
+	if secondA1.Position != firstA1.Position+1 {
+		t.Errorf("khoá thứ hai của A1 có position %d, want %d", secondA1.Position, firstA1.Position+1)
+	}
+
+	// Bậc C2 chưa có khoá nào: khoá đầu tiên phải bắt đầu từ 0, tức là bộ đếm
+	// tính riêng cho từng bậc.
+	firstC2 := create("vi-tri-c2-mot", course.LevelC2)
+	if firstC2.Position != 0 {
+		t.Errorf("khoá đầu của C2 có position %d, want 0", firstC2.Position)
+	}
+}
+
+func TestRepoChangingLevelMovesTheCourseToTheEnd(t *testing.T) {
+	t.Parallel()
+
+	repo, _ := newRepo(t)
+	ctx := context.Background()
+
+	moved, err := repo.Create(ctx, course.CreateParams{
+		Slug: "khoa-doi-bac", Title: "Khoá đổi bậc", Level: course.LevelC1, Status: course.StatusDraft,
+	})
+	if err != nil {
+		t.Fatalf("Create() returned error: %v", err)
+	}
+	neighbour, err := repo.Create(ctx, course.CreateParams{
+		Slug: "khoa-o-bac-dich", Title: "Khoá ở bậc đích", Level: course.LevelC2, Status: course.StatusDraft,
+	})
+	if err != nil {
+		t.Fatalf("Create() returned error: %v", err)
+	}
+
+	level := course.LevelC2
+	updated, err := repo.Update(ctx, moved.ID, course.UpdateParams{Level: &level})
+	if err != nil {
+		t.Fatalf("Update() returned error: %v", err)
+	}
+
+	// position cũ là thứ tự trong bậc cũ; mang sang bậc khác thì vô nghĩa và dễ
+	// trùng, nên khoá phải về cuối bậc mới.
+	if updated.Position != neighbour.Position+1 {
+		t.Errorf("position sau khi đổi bậc = %d, want %d", updated.Position, neighbour.Position+1)
+	}
+
+	// Sửa field khác thì position đứng yên.
+	title := "Tiêu đề khác"
+	again, err := repo.Update(ctx, moved.ID, course.UpdateParams{Title: &title})
+	if err != nil {
+		t.Fatalf("Update() returned error: %v", err)
+	}
+	if again.Position != updated.Position {
+		t.Errorf("sửa tiêu đề lại đổi position: %d -> %d", updated.Position, again.Position)
+	}
+}
+
+func TestRepoReorderCoursesIgnoresOtherLevels(t *testing.T) {
+	t.Parallel()
+
+	repo, _ := newRepo(t)
+	ctx := context.Background()
+
+	outsider, err := repo.Create(ctx, course.CreateParams{
+		Slug: "khoa-bac-khac", Title: "Khoá bậc khác", Level: course.LevelC1, Status: course.StatusDraft,
+	})
+	if err != nil {
+		t.Fatalf("Create() returned error: %v", err)
+	}
+
+	// Điều kiện level trong câu UPDATE: id của bậc khác không đổi được gì.
+	affected, err := repo.ReorderCourses(ctx, course.LevelC2, []string{outsider.ID})
+	if err != nil {
+		t.Fatalf("ReorderCourses() returned error: %v", err)
+	}
+	if affected != 0 {
+		t.Errorf("đổi %d hàng, want 0", affected)
+	}
+}

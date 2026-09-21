@@ -153,6 +153,7 @@ type Course struct {
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 	DeletedAt     *time.Time
+	Position      int32
 }
 
 type Lesson struct {

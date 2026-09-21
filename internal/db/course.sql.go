@@ -26,16 +26,21 @@ func (q *Queries) CourseExists(ctx context.Context, id pgtype.UUID) (bool, error
 }
 
 const createCourse = `-- name: CreateCourse :one
-INSERT INTO courses (slug, title, description, level, status, cover_image_url)
+INSERT INTO courses (slug, title, description, level, status, cover_image_url, position)
 VALUES (
     $1,
     $2,
     $3,
     $4,
     $5,
-    $6
+    $6,
+    (
+        SELECT coalesce(max(position) + 1, 0)
+        FROM courses AS sibling
+        WHERE sibling.level = $4 AND sibling.deleted_at IS NULL
+    )
 )
-RETURNING id, slug, title, description, level, status, cover_image_url, created_at, updated_at, deleted_at
+RETURNING id, slug, title, description, level, status, cover_image_url, created_at, updated_at, deleted_at, position
 `
 
 type CreateCourseParams struct {
@@ -47,6 +52,7 @@ type CreateCourseParams struct {
 	CoverImageUrl *string
 }
 
+// Khoá mới đứng cuối bậc của nó, giống cách bài mới đứng cuối khoá.
 func (q *Queries) CreateCourse(ctx context.Context, arg CreateCourseParams) (Course, error) {
 	row := q.db.QueryRow(ctx, createCourse,
 		arg.Slug,
@@ -68,12 +74,13 @@ func (q *Queries) CreateCourse(ctx context.Context, arg CreateCourseParams) (Cou
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Position,
 	)
 	return i, err
 }
 
 const getCourseByID = `-- name: GetCourseByID :one
-SELECT id, slug, title, description, level, status, cover_image_url, created_at, updated_at, deleted_at FROM courses
+SELECT id, slug, title, description, level, status, cover_image_url, created_at, updated_at, deleted_at, position FROM courses
 WHERE id = $1 AND deleted_at IS NULL
 `
 
@@ -91,12 +98,13 @@ func (q *Queries) GetCourseByID(ctx context.Context, id pgtype.UUID) (Course, er
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Position,
 	)
 	return i, err
 }
 
 const getCourseBySlug = `-- name: GetCourseBySlug :one
-SELECT id, slug, title, description, level, status, cover_image_url, created_at, updated_at, deleted_at FROM courses
+SELECT id, slug, title, description, level, status, cover_image_url, created_at, updated_at, deleted_at, position FROM courses
 WHERE slug = $1 AND deleted_at IS NULL
 `
 
@@ -114,12 +122,39 @@ func (q *Queries) GetCourseBySlug(ctx context.Context, slug string) (Course, err
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Position,
 	)
 	return i, err
 }
 
+const listCourseIDsByLevel = `-- name: ListCourseIDsByLevel :many
+SELECT id FROM courses
+WHERE level = $1 AND deleted_at IS NULL
+ORDER BY position, created_at, id
+`
+
+func (q *Queries) ListCourseIDsByLevel(ctx context.Context, level CourseLevel) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listCourseIDsByLevel, level)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCourses = `-- name: ListCourses :many
-SELECT id, slug, title, description, level, status, cover_image_url, created_at, updated_at, deleted_at FROM courses
+SELECT id, slug, title, description, level, status, cover_image_url, created_at, updated_at, deleted_at, position FROM courses
 WHERE deleted_at IS NULL
   AND ($1::course_status IS NULL OR status = $1::course_status)
   AND ($2::course_level IS NULL OR level = $2::course_level)
@@ -166,6 +201,7 @@ func (q *Queries) ListCourses(ctx context.Context, arg ListCoursesParams) ([]Cou
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.Position,
 		); err != nil {
 			return nil, err
 		}
@@ -175,6 +211,33 @@ func (q *Queries) ListCourses(ctx context.Context, arg ListCoursesParams) ([]Cou
 		return nil, err
 	}
 	return items, nil
+}
+
+const reorderCourses = `-- name: ReorderCourses :execrows
+UPDATE courses AS c
+SET position = new_order.position, updated_at = now()
+FROM (
+    SELECT id, (ordinality - 1)::integer AS position
+    FROM unnest($2::uuid[]) WITH ORDINALITY AS t(id, ordinality)
+) AS new_order
+WHERE c.id = new_order.id
+  AND c.level = $1
+  AND c.deleted_at IS NULL
+`
+
+type ReorderCoursesParams struct {
+	Level     CourseLevel
+	CourseIds []pgtype.UUID
+}
+
+// Đánh lại position theo đúng thứ tự mảng gửi lên, trong một câu. Điều kiện
+// level giữ cho id của bậc khác không đổi được gì.
+func (q *Queries) ReorderCourses(ctx context.Context, arg ReorderCoursesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reorderCourses, arg.Level, arg.CourseIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const softDeleteCourse = `-- name: SoftDeleteCourse :execrows
@@ -192,20 +255,30 @@ func (q *Queries) SoftDeleteCourse(ctx context.Context, id pgtype.UUID) (int64, 
 }
 
 const updateCourse = `-- name: UpdateCourse :one
-UPDATE courses
+UPDATE courses AS c
 SET
-    slug            = COALESCE($1, slug),
-    title           = COALESCE($2, title),
-    description     = COALESCE($3, description),
-    level           = COALESCE($4, level),
-    status          = COALESCE($5, status),
+    slug            = COALESCE($1, c.slug),
+    title           = COALESCE($2, c.title),
+    description     = COALESCE($3, c.description),
+    level           = COALESCE($4, c.level),
+    status          = COALESCE($5, c.status),
     cover_image_url = CASE
         WHEN $6::boolean THEN NULL
-        ELSE COALESCE($7, cover_image_url)
+        ELSE COALESCE($7, c.cover_image_url)
+    END,
+    -- Đổi bậc thì khoá về cuối bậc mới: position cũ là thứ tự trong bậc cũ,
+    -- mang sang bậc khác thì vô nghĩa và dễ trùng với khoá đang có ở đó.
+    position        = CASE
+        WHEN $4 IS NOT NULL AND $4 <> c.level THEN (
+            SELECT coalesce(max(position) + 1, 0)
+            FROM courses AS sibling
+            WHERE sibling.level = $4 AND sibling.deleted_at IS NULL
+        )
+        ELSE c.position
     END,
     updated_at      = now()
-WHERE id = $8 AND deleted_at IS NULL
-RETURNING id, slug, title, description, level, status, cover_image_url, created_at, updated_at, deleted_at
+WHERE c.id = $8 AND c.deleted_at IS NULL
+RETURNING c.id, c.slug, c.title, c.description, c.level, c.status, c.cover_image_url, c.created_at, c.updated_at, c.deleted_at, c.position
 `
 
 type UpdateCourseParams struct {
@@ -243,6 +316,7 @@ func (q *Queries) UpdateCourse(ctx context.Context, arg UpdateCourseParams) (Cou
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Position,
 	)
 	return i, err
 }

@@ -32,6 +32,7 @@ type fakeService struct {
 	updateLessonFn   func(context.Context, string, course.LessonUpdateParams) (course.Lesson, error)
 	deleteLessonFn   func(context.Context, string) error
 	reorderLessonsFn func(context.Context, string, []string) error
+	reorderCoursesFn func(context.Context, course.Level, []string) error
 
 	reorderedIDs []string
 }
@@ -488,6 +489,13 @@ func (f *fakeService) DeleteLesson(ctx context.Context, lessonID string) error {
 		f.t.Fatal("DeleteLesson called unexpectedly")
 	}
 	return f.deleteLessonFn(ctx, lessonID)
+}
+
+func (f *fakeService) ReorderCourses(ctx context.Context, level course.Level, courseIDs []string) error {
+	if f.reorderCoursesFn == nil {
+		f.t.Fatal("ReorderCourses called unexpectedly")
+	}
+	return f.reorderCoursesFn(ctx, level, courseIDs)
 }
 
 func (f *fakeService) ReorderLessons(ctx context.Context, courseID string, lessonIDs []string) error {

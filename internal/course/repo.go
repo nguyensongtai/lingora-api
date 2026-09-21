@@ -203,6 +203,42 @@ func parseID(raw string) (pgtype.UUID, error) {
 	return id, nil
 }
 
+// ListIDsByLevel trả về id các khoá của một bậc theo thứ tự hiện tại.
+func (r *Repo) ListIDsByLevel(ctx context.Context, level Level) ([]string, error) {
+	rows, err := r.q.ListCourseIDsByLevel(ctx, db.CourseLevel(level))
+	if err != nil {
+		return nil, fmt.Errorf("list course ids of level %s: %w", level, err)
+	}
+
+	ids := make([]string, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, postgres.UUIDString(row))
+	}
+	return ids, nil
+}
+
+// ReorderCourses đánh lại position theo đúng thứ tự courseIDs và trả về số hàng
+// đã đổi.
+func (r *Repo) ReorderCourses(ctx context.Context, level Level, courseIDs []string) (int64, error) {
+	parsed := make([]pgtype.UUID, 0, len(courseIDs))
+	for _, courseID := range courseIDs {
+		value, err := parseID(courseID)
+		if err != nil {
+			return 0, err
+		}
+		parsed = append(parsed, value)
+	}
+
+	affected, err := r.q.ReorderCourses(ctx, db.ReorderCoursesParams{
+		Level:     db.CourseLevel(level),
+		CourseIds: parsed,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("reorder courses of level %s: %w", level, err)
+	}
+	return affected, nil
+}
+
 func isUniqueViolation(err error, constraint string) bool {
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) {
@@ -219,6 +255,7 @@ func toCourse(row db.Course) Course {
 		Description:   row.Description,
 		Level:         Level(row.Level),
 		Status:        Status(row.Status),
+		Position:      row.Position,
 		CoverImageURL: row.CoverImageUrl,
 		CreatedAt:     row.CreatedAt,
 		UpdatedAt:     row.UpdatedAt,

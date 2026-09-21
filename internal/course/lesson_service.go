@@ -108,25 +108,31 @@ func (s *Service) requireCourse(ctx context.Context, courseID string) error {
 }
 
 func checkSameLessonSet(current, requested []string) error {
+	return checkSameIDSet(current, requested, "lesson_ids", "bài")
+}
+
+// checkSameIDSet đòi danh sách gửi lên đúng bằng tập hiện có. Dùng chung cho cả
+// sắp xếp bài trong khoá lẫn sắp xếp khoá trong bậc.
+func checkSameIDSet(current, requested []string, field, noun string) error {
 	var v validationBuilder
 
 	seen := make(map[string]bool, len(requested))
 	for _, id := range requested {
 		if seen[id] {
-			v.add("lesson_ids", "có id bị lặp")
+			v.add(field, "có id bị lặp")
 			return v.err()
 		}
 		seen[id] = true
 	}
 
 	if len(requested) != len(current) {
-		v.add("lesson_ids", fmt.Sprintf("phải liệt kê đủ %d bài của khoá, đang có %d", len(current), len(requested)))
+		v.add(field, fmt.Sprintf("phải liệt kê đủ %d %s, đang có %d", len(current), noun, len(requested)))
 		return v.err()
 	}
 
 	for _, id := range current {
 		if !seen[id] {
-			v.add("lesson_ids", "thiếu bài "+id)
+			v.add(field, "thiếu "+noun+" "+id)
 			return v.err()
 		}
 	}

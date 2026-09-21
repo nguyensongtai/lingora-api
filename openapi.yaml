@@ -241,6 +241,33 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
 
+  /courses/order:
+    put:
+      tags: [courses]
+      summary: Sắp xếp khoá học trong một bậc
+      description: |
+        `course_ids` phải là đúng tập khoá hiện có của bậc đó. Thiếu, thừa hay
+        trùng đều bị từ chối, vì một lần sắp xếp thiếu khoá sẽ để lại những khoá
+        mang thứ tự cũ lẫn vào giữa.
+      operationId: reorderCourses
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CourseOrder'
+      responses:
+        '204':
+          description: Đã sắp xếp
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   /courses/{courseId}:
     parameters:
       - $ref: '#/components/parameters/CourseId'
@@ -1082,7 +1109,7 @@ components:
 
     Course:
       type: object
-      required: [id, slug, title, description, level, status, cover_image_url, created_at, updated_at]
+      required: [id, slug, title, description, level, status, cover_image_url, position, created_at, updated_at]
       properties:
         id:
           type: string
@@ -1104,6 +1131,10 @@ components:
           type: string
           format: uri
           nullable: true
+        position:
+          type: integer
+          format: int32
+          description: Thứ tự trong bậc, do người soạn đặt.
         created_at:
           type: string
           format: date-time
@@ -1147,6 +1178,20 @@ components:
           format: uri
           maxLength: 2048
           nullable: true
+
+    CourseOrder:
+      type: object
+      required: [level, course_ids]
+      properties:
+        level:
+          $ref: '#/components/schemas/CourseLevel'
+        course_ids:
+          type: array
+          description: Toàn bộ id khoá của bậc đó, theo thứ tự mong muốn.
+          items:
+            type: string
+            format: uuid
+            x-go-type: string
 
     CourseUpdate:
       type: object

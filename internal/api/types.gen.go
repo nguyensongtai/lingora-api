@@ -158,6 +158,9 @@ type Course struct {
 	// Level Trình độ theo khung CEFR.
 	Level CourseLevel `json:"level"`
 
+	// Position Thứ tự trong bậc, do người soạn đặt.
+	Position int32 `json:"position"`
+
 	// Slug Example: ngu-phap-co-ban
 	Slug string `json:"slug"`
 
@@ -192,6 +195,15 @@ type CourseList struct {
 
 	// NextCursor Con trỏ cho trang kế tiếp; `null` nghĩa là đã hết.
 	NextCursor *string `json:"next_cursor"`
+}
+
+// CourseOrder defines model for CourseOrder.
+type CourseOrder struct {
+	// CourseIds Toàn bộ id khoá của bậc đó, theo thứ tự mong muốn.
+	CourseIds []string `json:"course_ids"`
+
+	// Level Trình độ theo khung CEFR.
+	Level CourseLevel `json:"level"`
 }
 
 // CourseProgress defines model for CourseProgress.
@@ -517,6 +529,9 @@ type RegisterJSONRequestBody = RegisterRequest
 
 // CreateCourseJSONRequestBody defines body for CreateCourse for application/json ContentType.
 type CreateCourseJSONRequestBody = CourseCreate
+
+// ReorderCoursesJSONRequestBody defines body for ReorderCourses for application/json ContentType.
+type ReorderCoursesJSONRequestBody = CourseOrder
 
 // UpdateCourseJSONRequestBody defines body for UpdateCourse for application/json ContentType.
 type UpdateCourseJSONRequestBody = CourseUpdate

@@ -31,6 +31,10 @@ type fakeRepo struct {
 	listLessonIDsFn    func(context.Context, string) ([]string, error)
 	reorderLessonsFn   func(context.Context, string, []string) (int64, error)
 
+	listIDsByLevelFn   func(context.Context, course.Level) ([]string, error)
+	reorderCoursesFn   func(context.Context, course.Level, []string) (int64, error)
+	reorderCoursesArgs []string
+
 	listLessonsCalled  bool
 	reorderLessonsArgs []string
 }
@@ -75,6 +79,21 @@ func (f *fakeRepo) SoftDelete(ctx context.Context, id string) error {
 		f.t.Fatal("SoftDelete called unexpectedly")
 	}
 	return f.softDeleteFn(ctx, id)
+}
+
+func (f *fakeRepo) ListIDsByLevel(ctx context.Context, level course.Level) ([]string, error) {
+	if f.listIDsByLevelFn == nil {
+		f.t.Fatal("ListIDsByLevel called unexpectedly")
+	}
+	return f.listIDsByLevelFn(ctx, level)
+}
+
+func (f *fakeRepo) ReorderCourses(ctx context.Context, level course.Level, courseIDs []string) (int64, error) {
+	f.reorderCoursesArgs = courseIDs
+	if f.reorderCoursesFn == nil {
+		return int64(len(courseIDs)), nil
+	}
+	return f.reorderCoursesFn(ctx, level, courseIDs)
 }
 
 func (f *fakeRepo) Exists(ctx context.Context, id string) (bool, error) {
@@ -567,4 +586,68 @@ func (f *fakeRepo) ReorderLessons(ctx context.Context, courseID string, lessonID
 		f.t.Fatal("ReorderLessons called unexpectedly")
 	}
 	return f.reorderLessonsFn(ctx, courseID, lessonIDs)
+}
+
+func TestReorderCoursesRequiresTheWholeLevel(t *testing.T) {
+	t.Parallel()
+
+	existing := []string{"khoa-1", "khoa-2", "khoa-3"}
+	newRepo := func() *fakeRepo {
+		return &fakeRepo{
+			t: t,
+			listIDsByLevelFn: func(context.Context, course.Level) ([]string, error) {
+				return existing, nil
+			},
+		}
+	}
+
+	t.Run("đủ tập thì đổi", func(t *testing.T) {
+		t.Parallel()
+
+		repo := newRepo()
+		want := []string{"khoa-3", "khoa-1", "khoa-2"}
+		if err := course.NewService(repo).ReorderCourses(context.Background(), course.LevelA1, want); err != nil {
+			t.Fatalf("ReorderCourses() returned error: %v", err)
+		}
+		if len(repo.reorderCoursesArgs) != 3 || repo.reorderCoursesArgs[0] != "khoa-3" {
+			t.Errorf("gửi xuống kho %v, want %v", repo.reorderCoursesArgs, want)
+		}
+	})
+
+	for name, ids := range map[string][]string{
+		"thiếu khoá": {"khoa-1", "khoa-2"},
+		"id lặp":     {"khoa-1", "khoa-1", "khoa-2"},
+		"khoá lạ":    {"khoa-1", "khoa-2", "khoa-la"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			repo := newRepo()
+			err := course.NewService(repo).ReorderCourses(context.Background(), course.LevelA1, ids)
+
+			var validationErr *course.ValidationError
+			if !errors.As(err, &validationErr) {
+				t.Fatalf("error = %v, want *ValidationError", err)
+			}
+			if _, ok := validationErr.Fields["course_ids"]; !ok {
+				t.Errorf("Fields = %v, want có key course_ids", validationErr.Fields)
+			}
+			if repo.reorderCoursesArgs != nil {
+				t.Error("đã gọi xuống kho dù danh sách không hợp lệ")
+			}
+		})
+	}
+
+	t.Run("bậc không hợp lệ", func(t *testing.T) {
+		t.Parallel()
+
+		// listIDsByLevelFn nil: bậc sai thì không được hỏi tới kho.
+		err := course.NewService(&fakeRepo{t: t}).
+			ReorderCourses(context.Background(), course.Level("Z9"), existing)
+
+		var validationErr *course.ValidationError
+		if !errors.As(err, &validationErr) {
+			t.Fatalf("error = %v, want *ValidationError", err)
+		}
+	})
 }

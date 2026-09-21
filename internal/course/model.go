@@ -52,8 +52,10 @@ type Course struct {
 	Level         Level
 	Status        Status
 	CoverImageURL *string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	// Position là thứ tự trong bậc của khoá, do người soạn đặt.
+	Position  int32
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // Lesson là bài học thuộc một khoá, sắp xếp theo Position tăng dần.

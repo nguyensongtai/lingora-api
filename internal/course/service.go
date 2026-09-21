@@ -36,6 +36,12 @@ type repository interface {
 	SoftDelete(ctx context.Context, id string) error
 	Exists(ctx context.Context, id string) (bool, error)
 	ListLessons(ctx context.Context, courseID string) ([]Lesson, error)
+	CreateLesson(ctx context.Context, courseID string, params LessonCreateParams) (Lesson, error)
+	GetLesson(ctx context.Context, lessonID string) (Lesson, error)
+	UpdateLesson(ctx context.Context, lessonID string, params LessonUpdateParams) (Lesson, error)
+	SoftDeleteLesson(ctx context.Context, lessonID string) error
+	ListLessonIDs(ctx context.Context, courseID string) ([]string, error)
+	ReorderLessons(ctx context.Context, courseID string, lessonIDs []string) (int64, error)
 }
 
 // Service giữ nghiệp vụ khoá học: chuẩn hoá đầu vào, validate, phân trang.

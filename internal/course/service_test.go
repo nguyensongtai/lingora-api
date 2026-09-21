@@ -24,7 +24,15 @@ type fakeRepo struct {
 	existsFn      func(context.Context, string) (bool, error)
 	listLessonsFn func(context.Context, string) ([]course.Lesson, error)
 
-	listLessonsCalled bool
+	createLessonFn     func(context.Context, string, course.LessonCreateParams) (course.Lesson, error)
+	getLessonFn        func(context.Context, string) (course.Lesson, error)
+	updateLessonFn     func(context.Context, string, course.LessonUpdateParams) (course.Lesson, error)
+	softDeleteLessonFn func(context.Context, string) error
+	listLessonIDsFn    func(context.Context, string) ([]string, error)
+	reorderLessonsFn   func(context.Context, string, []string) (int64, error)
+
+	listLessonsCalled  bool
+	reorderLessonsArgs []string
 }
 
 func (f *fakeRepo) Create(ctx context.Context, params course.CreateParams) (course.Course, error) {
@@ -516,4 +524,47 @@ func TestValidationErrorMessageListsFieldsInOrder(t *testing.T) {
 	if got := err.Error(); got != want {
 		t.Errorf("Error() = %q, want %q", got, want)
 	}
+}
+
+func (f *fakeRepo) CreateLesson(ctx context.Context, courseID string, params course.LessonCreateParams) (course.Lesson, error) {
+	if f.createLessonFn == nil {
+		f.t.Fatal("CreateLesson called unexpectedly")
+	}
+	return f.createLessonFn(ctx, courseID, params)
+}
+
+func (f *fakeRepo) GetLesson(ctx context.Context, lessonID string) (course.Lesson, error) {
+	if f.getLessonFn == nil {
+		f.t.Fatal("GetLesson called unexpectedly")
+	}
+	return f.getLessonFn(ctx, lessonID)
+}
+
+func (f *fakeRepo) UpdateLesson(ctx context.Context, lessonID string, params course.LessonUpdateParams) (course.Lesson, error) {
+	if f.updateLessonFn == nil {
+		f.t.Fatal("UpdateLesson called unexpectedly")
+	}
+	return f.updateLessonFn(ctx, lessonID, params)
+}
+
+func (f *fakeRepo) SoftDeleteLesson(ctx context.Context, lessonID string) error {
+	if f.softDeleteLessonFn == nil {
+		f.t.Fatal("SoftDeleteLesson called unexpectedly")
+	}
+	return f.softDeleteLessonFn(ctx, lessonID)
+}
+
+func (f *fakeRepo) ListLessonIDs(ctx context.Context, courseID string) ([]string, error) {
+	if f.listLessonIDsFn == nil {
+		f.t.Fatal("ListLessonIDs called unexpectedly")
+	}
+	return f.listLessonIDsFn(ctx, courseID)
+}
+
+func (f *fakeRepo) ReorderLessons(ctx context.Context, courseID string, lessonIDs []string) (int64, error) {
+	f.reorderLessonsArgs = lessonIDs
+	if f.reorderLessonsFn == nil {
+		f.t.Fatal("ReorderLessons called unexpectedly")
+	}
+	return f.reorderLessonsFn(ctx, courseID, lessonIDs)
 }

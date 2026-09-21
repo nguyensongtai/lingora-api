@@ -192,3 +192,29 @@ type User struct {
 	DeletedAt    *time.Time
 	GoogleSub    *string
 }
+
+type VocabularyEntry struct {
+	ID        pgtype.UUID
+	LessonID  pgtype.UUID
+	Word      string
+	Ipa       string
+	Meaning   string
+	Example   string
+	ExampleVi string
+	Position  int32
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt *time.Time
+}
+
+type VocabularyReview struct {
+	UserID         pgtype.UUID
+	EntryID        pgtype.UUID
+	EaseFactor     float64
+	IntervalDays   int32
+	Repetitions    int32
+	DueOn          pgtype.Date
+	LastReviewedAt time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}

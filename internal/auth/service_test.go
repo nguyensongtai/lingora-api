@@ -98,7 +98,7 @@ func adminAccount(t *testing.T) user.User {
 	return user.User{
 		ID:           "018f3a9c-7b2e-7c31-9a55-0f1d2e3a4b5c",
 		Email:        "admin@lingora.vn",
-		PasswordHash: hash,
+		PasswordHash: &hash,
 		DisplayName:  "Quản trị",
 		Role:         user.RoleAdmin,
 	}
@@ -133,7 +133,7 @@ func TestLoginIssuesUsableTokenPair(t *testing.T) {
 	if pair.ExpiresIn != int64((15 * time.Minute).Seconds()) {
 		t.Errorf("ExpiresIn = %d, want 900", pair.ExpiresIn)
 	}
-	if pair.User.PasswordHash != "" {
+	if pair.User.PasswordHash != nil {
 		t.Error("TokenPair carries the password hash, want it stripped")
 	}
 	if len(sessions.created) != 1 || sessions.created[0] != account.ID {
@@ -338,8 +338,11 @@ func TestRegisterCreatesAStudentAndLogsThemIn(t *testing.T) {
 	if got.DisplayName != "Nguyễn An" {
 		t.Errorf("display_name = %q, want nó được trim", got.DisplayName)
 	}
-	if got.PasswordHash == "mat-khau-du-dai-2026" || got.PasswordHash == "" {
-		t.Errorf("password_hash = %q, want một hash bcrypt", got.PasswordHash)
+	if got.PasswordHash == nil || *got.PasswordHash == "mat-khau-du-dai-2026" {
+		t.Error("password_hash phải là một hash bcrypt, không phải mật khẩu thô")
+	}
+	if got.GoogleSub != nil {
+		t.Error("đăng ký bằng email không được gắn kèm tài khoản Google")
 	}
 	if pair.AccessToken == "" || pair.RefreshToken == "" {
 		t.Error("Register() phải trả luôn cặp token, không bắt đăng nhập lại")
@@ -393,3 +396,31 @@ func TestRegisterSurfacesDuplicateEmail(t *testing.T) {
 		t.Fatalf("Register() error = %v, want ErrEmailTaken", err)
 	}
 }
+
+func TestLoginRejectsAnAccountWithoutAPassword(t *testing.T) {
+	t.Parallel()
+
+	// Tài khoản chỉ đăng nhập bằng Google: không có hash nào để so.
+	googleOnly := user.User{
+		ID:          "018f3a9c-7b2e-7c31-9a55-0f1d2e3a4b60",
+		Email:       "an@example.com",
+		DisplayName: "An",
+		Role:        user.RoleStudent,
+		GoogleSub:   ptr("google-123"),
+	}
+	users := &fakeUsers{
+		t:       t,
+		byEmail: func(context.Context, string) (user.User, error) { return googleOnly, nil },
+	}
+
+	_, err := newService(t, users, newFakeSessions(t)).
+		Login(context.Background(), "an@example.com", "mat-khau-nao-do-2026")
+
+	// Lỗi phải giống hệt trường hợp sai mật khẩu: câu trả lời không được tiết
+	// lộ tài khoản đó đăng nhập bằng cách nào.
+	if !errors.Is(err, auth.ErrInvalidCredentials) {
+		t.Fatalf("Login() error = %v, want ErrInvalidCredentials", err)
+	}
+}
+
+func ptr[T any](value T) *T { return &value }

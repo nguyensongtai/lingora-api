@@ -23,22 +23,31 @@ func (r Role) Valid() bool {
 }
 
 // User là model nghiệp vụ. PasswordHash chỉ dùng trong quá trình xác thực và
-// không bao giờ được đưa ra ngoài tầng HTTP.
+// không bao giờ được đưa ra ngoài tầng HTTP; nil nghĩa là tài khoản chỉ đăng
+// nhập bằng Google.
 type User struct {
 	ID           string
 	Email        string
-	PasswordHash string
+	PasswordHash *string
 	DisplayName  string
 	Role         Role
+	GoogleSub    *string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }
 
+// HasPassword cho biết tài khoản có đăng nhập bằng mật khẩu được hay không.
+func (u User) HasPassword() bool {
+	return u.PasswordHash != nil
+}
+
 // CreateParams là dữ liệu đã hợp lệ để tạo người dùng; mật khẩu phải được băm
-// từ trước, repo không tự băm.
+// từ trước, repo không tự băm. Đúng một trong hai — PasswordHash hoặc
+// GoogleSub — phải khác nil, và database cũng kiểm lại điều đó.
 type CreateParams struct {
 	Email        string
-	PasswordHash string
+	PasswordHash *string
 	DisplayName  string
 	Role         Role
+	GoogleSub    *string
 }

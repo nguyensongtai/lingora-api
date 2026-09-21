@@ -117,7 +117,7 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 	// đứng trước: hai lần đăng ký cùng lúc thì đúng một lần thắng.
 	created, err := s.users.Create(ctx, user.CreateParams{
 		Email:        email,
-		PasswordHash: hash,
+		PasswordHash: &hash,
 		DisplayName:  displayName,
 		Role:         user.RoleStudent,
 	})
@@ -140,7 +140,15 @@ func (s *Service) Login(ctx context.Context, email, password string) (TokenPair,
 		return TokenPair{}, fmt.Errorf("login: %w", err)
 	}
 
-	if err := VerifyPassword(found.PasswordHash, password); err != nil {
+	// Tài khoản chỉ có Google thì không có mật khẩu để so. Vẫn chạy bcrypt giả
+	// rồi trả đúng lỗi như sai mật khẩu: câu trả lời không được tiết lộ tài
+	// khoản đó đăng nhập bằng cách nào.
+	if !found.HasPassword() {
+		burnPasswordTime(password)
+		return TokenPair{}, ErrInvalidCredentials
+	}
+
+	if err := VerifyPassword(*found.PasswordHash, password); err != nil {
 		return TokenPair{}, err
 	}
 
@@ -209,7 +217,7 @@ func (s *Service) issue(ctx context.Context, account user.User) (TokenPair, erro
 		return TokenPair{}, fmt.Errorf("issue tokens: %w", err)
 	}
 
-	account.PasswordHash = ""
+	account.PasswordHash = nil
 	return TokenPair{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,

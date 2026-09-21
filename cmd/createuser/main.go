@@ -75,7 +75,7 @@ func run(email, name, role string) error {
 
 	created, err := user.NewRepo(pool).Create(ctx, user.CreateParams{
 		Email:        email,
-		PasswordHash: hash,
+		PasswordHash: &hash,
 		DisplayName:  name,
 		Role:         user.Role(role),
 	})

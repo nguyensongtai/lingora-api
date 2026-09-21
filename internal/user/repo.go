@@ -31,12 +31,49 @@ func (r *Repo) Create(ctx context.Context, params CreateParams) (User, error) {
 		PasswordHash: params.PasswordHash,
 		DisplayName:  params.DisplayName,
 		Role:         db.UserRole(params.Role),
+		GoogleSub:    params.GoogleSub,
 	})
 	if err != nil {
 		if isUniqueViolation(err, "users_email_key") {
 			return User{}, fmt.Errorf("create user %q: %w", params.Email, ErrEmailTaken)
 		}
+		if isUniqueViolation(err, "users_google_sub_key") {
+			return User{}, fmt.Errorf("create user %q: %w", params.Email, ErrGoogleAccountTaken)
+		}
 		return User{}, fmt.Errorf("create user: %w", err)
+	}
+	return toUser(row), nil
+}
+
+// GetByGoogleSub tìm người dùng theo id Google đã gắn.
+func (r *Repo) GetByGoogleSub(ctx context.Context, googleSub string) (User, error) {
+	row, err := r.q.GetUserByGoogleSub(ctx, &googleSub)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return User{}, fmt.Errorf("get user by google sub: %w", ErrNotFound)
+		}
+		return User{}, fmt.Errorf("get user by google sub: %w", err)
+	}
+	return toUser(row), nil
+}
+
+// LinkGoogle gắn tài khoản Google vào một người dùng đã có. Không có hàng nào
+// đổi nghĩa là người đó đã gắn Google khác rồi.
+func (r *Repo) LinkGoogle(ctx context.Context, id, googleSub string) (User, error) {
+	userID, err := postgres.ParseUUID(id)
+	if err != nil {
+		return User{}, fmt.Errorf("%w: %q", ErrInvalidID, id)
+	}
+
+	row, err := r.q.LinkGoogleSub(ctx, db.LinkGoogleSubParams{ID: userID, GoogleSub: &googleSub})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return User{}, fmt.Errorf("link google to %s: %w", id, ErrGoogleAlreadyLinked)
+		}
+		if isUniqueViolation(err, "users_google_sub_key") {
+			return User{}, fmt.Errorf("link google to %s: %w", id, ErrGoogleAccountTaken)
+		}
+		return User{}, fmt.Errorf("link google to %s: %w", id, err)
 	}
 	return toUser(row), nil
 }
@@ -85,6 +122,7 @@ func toUser(row db.User) User {
 		PasswordHash: row.PasswordHash,
 		DisplayName:  row.DisplayName,
 		Role:         Role(row.Role),
+		GoogleSub:    row.GoogleSub,
 		CreatedAt:    row.CreatedAt,
 		UpdatedAt:    row.UpdatedAt,
 	}

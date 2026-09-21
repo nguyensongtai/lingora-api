@@ -12,21 +12,23 @@ import (
 )
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (email, password_hash, display_name, role)
+INSERT INTO users (email, password_hash, display_name, role, google_sub)
 VALUES (
     $1,
     $2,
     $3,
-    $4
+    $4,
+    $5
 )
-RETURNING id, email, password_hash, display_name, role, created_at, updated_at, deleted_at
+RETURNING id, email, password_hash, display_name, role, created_at, updated_at, deleted_at, google_sub
 `
 
 type CreateUserParams struct {
 	Email        string
-	PasswordHash string
+	PasswordHash *string
 	DisplayName  string
 	Role         UserRole
+	GoogleSub    *string
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
@@ -35,6 +37,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		arg.PasswordHash,
 		arg.DisplayName,
 		arg.Role,
+		arg.GoogleSub,
 	)
 	var i User
 	err := row.Scan(
@@ -46,12 +49,13 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.GoogleSub,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, display_name, role, created_at, updated_at, deleted_at FROM users
+SELECT id, email, password_hash, display_name, role, created_at, updated_at, deleted_at, google_sub FROM users
 WHERE lower(email) = lower($1) AND deleted_at IS NULL
 `
 
@@ -67,12 +71,35 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.GoogleSub,
+	)
+	return i, err
+}
+
+const getUserByGoogleSub = `-- name: GetUserByGoogleSub :one
+SELECT id, email, password_hash, display_name, role, created_at, updated_at, deleted_at, google_sub FROM users
+WHERE google_sub = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetUserByGoogleSub(ctx context.Context, googleSub *string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByGoogleSub, googleSub)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.DisplayName,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.GoogleSub,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, display_name, role, created_at, updated_at, deleted_at FROM users
+SELECT id, email, password_hash, display_name, role, created_at, updated_at, deleted_at, google_sub FROM users
 WHERE id = $1 AND deleted_at IS NULL
 `
 
@@ -88,6 +115,38 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.GoogleSub,
+	)
+	return i, err
+}
+
+const linkGoogleSub = `-- name: LinkGoogleSub :one
+UPDATE users
+SET google_sub = $1, updated_at = now()
+WHERE id = $2 AND google_sub IS NULL AND deleted_at IS NULL
+RETURNING id, email, password_hash, display_name, role, created_at, updated_at, deleted_at, google_sub
+`
+
+type LinkGoogleSubParams struct {
+	GoogleSub *string
+	ID        pgtype.UUID
+}
+
+// Gắn tài khoản Google vào một tài khoản email đã có. Chỉ đổi khi chưa gắn với
+// ai, để hai lần gọi song song không ghi đè lên nhau.
+func (q *Queries) LinkGoogleSub(ctx context.Context, arg LinkGoogleSubParams) (User, error) {
+	row := q.db.QueryRow(ctx, linkGoogleSub, arg.GoogleSub, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.DisplayName,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.GoogleSub,
 	)
 	return i, err
 }

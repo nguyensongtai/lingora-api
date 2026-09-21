@@ -184,10 +184,11 @@ type RefreshToken struct {
 type User struct {
 	ID           pgtype.UUID
 	Email        string
-	PasswordHash string
+	PasswordHash *string
 	DisplayName  string
 	Role         UserRole
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	DeletedAt    *time.Time
+	GoogleSub    *string
 }

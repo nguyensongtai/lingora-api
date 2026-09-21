@@ -144,3 +144,15 @@ func parseLessonID(raw string) (pgtype.UUID, error) {
 	}
 	return id, nil
 }
+
+// LessonExists cho biết bài còn sống hay không. Tách khỏi GetLesson để phía gọi
+// chỉ hỏi sự tồn tại không phải kéo theo cả nội dung bài.
+func (r *Repo) LessonExists(ctx context.Context, lessonID string) (bool, error) {
+	if _, err := r.GetLesson(ctx, lessonID); err != nil {
+		if errors.Is(err, ErrLessonNotFound) || errors.Is(err, ErrInvalidID) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}

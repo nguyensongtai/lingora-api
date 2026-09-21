@@ -1,0 +1,443 @@
+openapi: 3.0.3
+
+info:
+  title: Lingora API
+  version: 0.1.0
+  description: |
+    API nội dung học tiếng Anh của Lingora.
+
+    Route đọc là công khai. Route ghi cần access token JWT HS256 có claim
+    `role: admin`.
+
+servers:
+  - url: http://localhost:8080/v1
+    description: Máy dev
+  - url: https://api.lingora.vn/v1
+    description: Production
+
+tags:
+  - name: courses
+    description: Khoá học và bài học thuộc khoá
+
+paths:
+  /courses:
+    get:
+      tags: [courses]
+      summary: Liệt kê khoá học
+      description: |
+        Phân trang keyset. Trang đầu không truyền `cursor`; các trang sau truyền
+        lại nguyên văn `next_cursor` của trang trước. `next_cursor` bằng `null`
+        nghĩa là đã hết dữ liệu.
+      operationId: listCourses
+      parameters:
+        - $ref: '#/components/parameters/StatusFilter'
+        - $ref: '#/components/parameters/LevelFilter'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Một trang khoá học
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+    post:
+      tags: [courses]
+      summary: Tạo khoá học
+      operationId: createCourse
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CourseCreate'
+      responses:
+        '201':
+          description: Khoá học đã được tạo
+          headers:
+            Location:
+              description: Đường dẫn tới khoá học vừa tạo
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Course'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /courses/{courseId}:
+    parameters:
+      - $ref: '#/components/parameters/CourseId'
+
+    get:
+      tags: [courses]
+      summary: Lấy khoá học theo id
+      operationId: getCourse
+      responses:
+        '200':
+          description: Khoá học
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Course'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags: [courses]
+      summary: Cập nhật một phần khoá học
+      description: |
+        Field vắng mặt thì giữ nguyên. Riêng `cover_image_url` gửi `null` nghĩa
+        là xoá ảnh bìa. Body rỗng bị từ chối.
+      operationId: updateCourse
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CourseUpdate'
+      responses:
+        '200':
+          description: Khoá học sau khi cập nhật
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Course'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+    delete:
+      tags: [courses]
+      summary: Xoá mềm khoá học
+      operationId: deleteCourse
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Đã xoá
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /courses/by-slug/{slug}:
+    get:
+      tags: [courses]
+      summary: Lấy khoá học theo slug
+      operationId: getCourseBySlug
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            example: ngu-phap-co-ban
+      responses:
+        '200':
+          description: Khoá học
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Course'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /courses/{courseId}/lessons:
+    parameters:
+      - $ref: '#/components/parameters/CourseId'
+
+    get:
+      tags: [courses]
+      summary: Liệt kê bài học của một khoá
+      description: |
+        Sắp xếp theo `position` tăng dần. Khoá không tồn tại trả về 404; khoá có
+        thật nhưng chưa có bài trả về mảng rỗng.
+      operationId: listCourseLessons
+      responses:
+        '200':
+          description: Danh sách bài học
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LessonList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "Access token HS256 với claim `role: admin`."
+
+  parameters:
+    CourseId:
+      name: courseId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+        x-go-type: string
+
+    StatusFilter:
+      name: status
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/CourseStatus'
+
+    LevelFilter:
+      name: level
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/CourseLevel'
+
+    PageSize:
+      name: page_size
+      in: query
+      required: false
+      description: Mặc định 20, trần 100.
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 100
+
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Chuỗi mờ lấy từ `next_cursor` của trang trước.
+      schema:
+        type: string
+
+  schemas:
+    CourseLevel:
+      type: string
+      description: Trình độ theo khung CEFR.
+      enum: [A1, A2, B1, B2, C1, C2]
+
+    CourseStatus:
+      type: string
+      description: Trạng thái xuất bản.
+      enum: [draft, published]
+
+    Course:
+      type: object
+      required: [id, slug, title, description, level, status, cover_image_url, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          x-go-type: string
+        slug:
+          type: string
+          example: ngu-phap-co-ban
+        title:
+          type: string
+          example: Ngữ pháp cơ bản
+        description:
+          type: string
+        level:
+          $ref: '#/components/schemas/CourseLevel'
+        status:
+          $ref: '#/components/schemas/CourseStatus'
+        cover_image_url:
+          type: string
+          format: uri
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CourseList:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Course'
+        next_cursor:
+          type: string
+          nullable: true
+          description: Con trỏ cho trang kế tiếp; `null` nghĩa là đã hết.
+
+    CourseCreate:
+      type: object
+      required: [slug, title, level]
+      properties:
+        slug:
+          type: string
+          maxLength: 120
+          pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 5000
+        level:
+          $ref: '#/components/schemas/CourseLevel'
+        status:
+          $ref: '#/components/schemas/CourseStatus'
+        cover_image_url:
+          type: string
+          format: uri
+          maxLength: 2048
+          nullable: true
+
+    CourseUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        slug:
+          type: string
+          maxLength: 120
+          pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 5000
+        level:
+          $ref: '#/components/schemas/CourseLevel'
+        status:
+          $ref: '#/components/schemas/CourseStatus'
+        cover_image_url:
+          type: string
+          format: uri
+          maxLength: 2048
+          nullable: true
+
+    Lesson:
+      type: object
+      required: [id, course_id, slug, title, position, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          x-go-type: string
+        course_id:
+          type: string
+          format: uuid
+          x-go-type: string
+        slug:
+          type: string
+        title:
+          type: string
+        position:
+          type: integer
+          format: int32
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    LessonList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Lesson'
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - validation_error
+            - malformed_body
+            - unauthorized
+            - forbidden
+            - not_found
+            - conflict
+            - internal_error
+        message:
+          type: string
+          description: Câu thông báo tiếng Việt, hiển thị được cho người dùng.
+        details:
+          type: object
+          additionalProperties:
+            type: string
+          description: Lỗi theo từng field, chỉ có với validation_error.
+
+  responses:
+    BadRequest:
+      description: Dữ liệu vào không hợp lệ
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: Thiếu token hoặc token không hợp lệ
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Forbidden:
+      description: Token hợp lệ nhưng không đủ quyền
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Không tìm thấy
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Conflict:
+      description: Xung đột với dữ liệu đang có
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

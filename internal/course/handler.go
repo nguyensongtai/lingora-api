@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/nguyensongtai/lingora-api/internal/api"
 	"github.com/nguyensongtai/lingora-api/internal/httpx"
 )
 
@@ -56,46 +57,12 @@ func (h *Handler) Mount(r chi.Router, adminOnly func(http.Handler) http.Handler)
 
 /* ---------- DTO ---------- */
 
-type courseResponse struct {
-	ID            string    `json:"id"`
-	Slug          string    `json:"slug"`
-	Title         string    `json:"title"`
-	Description   string    `json:"description"`
-	Level         string    `json:"level"`
-	Status        string    `json:"status"`
-	CoverImageURL *string   `json:"cover_image_url"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
-}
-
-type lessonResponse struct {
-	ID        string    `json:"id"`
-	CourseID  string    `json:"course_id"`
-	Slug      string    `json:"slug"`
-	Title     string    `json:"title"`
-	Position  int32     `json:"position"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
-
-type courseListResponse struct {
-	Items      []courseResponse `json:"items"`
-	NextCursor *string          `json:"next_cursor"`
-}
-
-type lessonListResponse struct {
-	Items []lessonResponse `json:"items"`
-}
-
-type createCourseRequest struct {
-	Slug          string  `json:"slug"`
-	Title         string  `json:"title"`
-	Description   string  `json:"description"`
-	Level         string  `json:"level"`
-	Status        string  `json:"status"`
-	CoverImageURL *string `json:"cover_image_url"`
-}
-
+// Response và body tạo mới dùng thẳng type sinh từ openapi.yaml: spec lệch code
+// là build gãy.
+//
+// Riêng body PATCH phải viết tay: oapi-codegen sinh *string cho cover_image_url
+// nên không phân biệt được "không gửi field" với "gửi null", mà đó lại đúng là
+// khác biệt giữa giữ nguyên ảnh bìa và xoá nó.
 type updateCourseRequest struct {
 	Slug          *string                `json:"slug"`
 	Title         *string                `json:"title"`
@@ -108,27 +75,33 @@ type updateCourseRequest struct {
 /* ---------- handler ---------- */
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-	var body createCourseRequest
+	var body api.CourseCreate
 	if err := httpx.DecodeJSON(w, r, &body); err != nil {
 		writeMalformed(w, err)
 		return
 	}
 
-	created, err := h.service.Create(r.Context(), CreateParams{
+	params := CreateParams{
 		Slug:          body.Slug,
 		Title:         body.Title,
-		Description:   body.Description,
 		Level:         Level(body.Level),
-		Status:        Status(body.Status),
-		CoverImageURL: body.CoverImageURL,
-	})
+		CoverImageURL: body.CoverImageUrl,
+	}
+	if body.Description != nil {
+		params.Description = *body.Description
+	}
+	if body.Status != nil {
+		params.Status = Status(*body.Status)
+	}
+
+	created, err := h.service.Create(r.Context(), params)
 	if err != nil {
 		writeError(w, r, err)
 		return
 	}
 
 	w.Header().Set("Location", "/v1/courses/"+created.ID)
-	httpx.JSON(w, http.StatusCreated, toCourseResponse(created))
+	httpx.JSON(w, http.StatusCreated, toAPICourse(created))
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
@@ -137,7 +110,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, toCourseResponse(found))
+	httpx.JSON(w, http.StatusOK, toAPICourse(found))
 }
 
 func (h *Handler) getBySlug(w http.ResponseWriter, r *http.Request) {
@@ -146,7 +119,7 @@ func (h *Handler) getBySlug(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, toCourseResponse(found))
+	httpx.JSON(w, http.StatusOK, toAPICourse(found))
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -162,12 +135,12 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := make([]courseResponse, 0, len(page.Items))
+	items := make([]api.Course, 0, len(page.Items))
 	for _, item := range page.Items {
-		items = append(items, toCourseResponse(item))
+		items = append(items, toAPICourse(item))
 	}
 
-	response := courseListResponse{Items: items}
+	response := api.CourseList{Items: items}
 	if page.NextCursor != nil {
 		encoded := encodeCursor(*page.NextCursor)
 		response.NextCursor = &encoded
@@ -203,7 +176,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, toCourseResponse(updated))
+	httpx.JSON(w, http.StatusOK, toAPICourse(updated))
 }
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
@@ -221,11 +194,11 @@ func (h *Handler) listLessons(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := make([]lessonResponse, 0, len(lessons))
+	items := make([]api.Lesson, 0, len(lessons))
 	for _, lesson := range lessons {
-		items = append(items, lessonResponse{
-			ID:        lesson.ID,
-			CourseID:  lesson.CourseID,
+		items = append(items, api.Lesson{
+			Id:        lesson.ID,
+			CourseId:  lesson.CourseID,
 			Slug:      lesson.Slug,
 			Title:     lesson.Title,
 			Position:  lesson.Position,
@@ -233,7 +206,7 @@ func (h *Handler) listLessons(w http.ResponseWriter, r *http.Request) {
 			UpdatedAt: lesson.UpdatedAt,
 		})
 	}
-	httpx.JSON(w, http.StatusOK, lessonListResponse{Items: items})
+	httpx.JSON(w, http.StatusOK, api.LessonList{Items: items})
 }
 
 /* ---------- query, cursor, lỗi ---------- */
@@ -298,15 +271,15 @@ func decodeCursor(raw string) (Cursor, error) {
 	return Cursor{CreatedAt: createdAt, ID: id}, nil
 }
 
-func toCourseResponse(item Course) courseResponse {
-	return courseResponse{
-		ID:            item.ID,
+func toAPICourse(item Course) api.Course {
+	return api.Course{
+		Id:            item.ID,
 		Slug:          item.Slug,
 		Title:         item.Title,
 		Description:   item.Description,
-		Level:         string(item.Level),
-		Status:        string(item.Status),
-		CoverImageURL: item.CoverImageURL,
+		Level:         api.CourseLevel(item.Level),
+		Status:        api.CourseStatus(item.Status),
+		CoverImageUrl: item.CoverImageURL,
 		CreatedAt:     item.CreatedAt,
 		UpdatedAt:     item.UpdatedAt,
 	}

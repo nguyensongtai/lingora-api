@@ -25,6 +25,10 @@ check: ## Format check, vet and build
 sqlc: ## Regenerate sqlc code from db/query
 	sqlc vet && sqlc generate
 
+.PHONY: openapi
+openapi: ## Sinh lại type Go từ openapi.yaml
+	oapi-codegen -config oapi-codegen.yaml openapi.yaml
+
 .PHONY: migrate-up
 migrate-up: ## Apply all pending migrations
 	migrate -path db/migrations -database "$(DATABASE_URL)" up

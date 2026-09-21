@@ -25,6 +25,13 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # Spec là nguồn sự thật: code sinh ra mà lệch spec thì CI phải đỏ.
+      - name: Check generated api types are up to date
+        run: |
+          go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0
+          oapi-codegen -config oapi-codegen.yaml openapi.yaml
+          git diff --exit-code -- internal/api/types.gen.go
+
       - name: Build
         run: go build ./...
 

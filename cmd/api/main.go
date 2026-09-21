@@ -22,6 +22,7 @@ import (
 	"github.com/nguyensongtai/lingora-api/internal/course"
 	"github.com/nguyensongtai/lingora-api/internal/httpx"
 	"github.com/nguyensongtai/lingora-api/internal/platform/postgres"
+	"github.com/nguyensongtai/lingora-api/internal/user"
 )
 
 func main() {
@@ -57,6 +58,16 @@ func run() error {
 	defer pool.Close()
 
 	// Dependency được nối tay theo mạch repo -> service -> handler.
+	authService, err := auth.NewService(user.NewRepo(pool), auth.NewSessionRepo(pool), auth.Config{
+		Secret:     cfg.JWTSecret,
+		AccessTTL:  cfg.AccessTokenTTL,
+		RefreshTTL: cfg.RefreshTokenTTL,
+	})
+	if err != nil {
+		return fmt.Errorf("build auth service: %w", err)
+	}
+
+	authHandler := auth.NewHandler(authService)
 	courseHandler := course.NewHandler(course.NewService(course.NewRepo(pool)))
 
 	router := chi.NewRouter()
@@ -81,6 +92,7 @@ func run() error {
 	})
 
 	router.Route("/v1", func(r chi.Router) {
+		authHandler.Mount(r, verifier.RequireAuthenticated())
 		courseHandler.Mount(r, verifier.RequireRole(auth.RoleAdmin))
 	})
 

@@ -20,6 +20,8 @@ type Config struct {
 	DatabaseURL        string
 	JWTSecret          string
 	CORSAllowedOrigins []string
+	AccessTokenTTL     time.Duration
+	RefreshTokenTTL    time.Duration
 	LogLevel           slog.Level
 	ShutdownTimeout    time.Duration
 }
@@ -35,6 +37,18 @@ func Load() (Config, error) {
 		CORSAllowedOrigins: splitList(lookup("CORS_ALLOWED_ORIGINS", "http://localhost:3000")),
 		ShutdownTimeout:    15 * time.Second,
 	}
+
+	accessTTL, err := parseDuration("ACCESS_TOKEN_TTL", 15*time.Minute)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.AccessTokenTTL = accessTTL
+
+	refreshTTL, err := parseDuration("REFRESH_TOKEN_TTL", 30*24*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.RefreshTokenTTL = refreshTTL
 
 	if cfg.DatabaseURL == "" {
 		return Config{}, fmt.Errorf("%w: DATABASE_URL", ErrMissingEnv)
@@ -77,4 +91,20 @@ func splitList(raw string) []string {
 		}
 	}
 	return values
+}
+
+func parseDuration(key string, fallback time.Duration) (time.Duration, error) {
+	raw, ok := os.LookupEnv(key)
+	if !ok || raw == "" {
+		return fallback, nil
+	}
+
+	value, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("config: parse %s %q: %w", key, raw, err)
+	}
+	if value <= 0 {
+		return 0, fmt.Errorf("config: %s phải lớn hơn 0", key)
+	}
+	return value, nil
 }

@@ -45,6 +45,10 @@ migrate-create: ## Create a migration pair: make migrate-create name=add_foo
 seed: ## Nạp dữ liệu mẫu cho môi trường dev (cần docker compose up -d)
 	docker compose exec -T postgres psql -U lingora -d lingora -v ON_ERROR_STOP=1 < db/seed/001_sample_courses.sql
 
+.PHONY: createuser
+createuser: ## Tạo tài khoản: make createuser email=... role=admin
+	@read -rs -p "Mật khẩu: " PW && echo && printf '%s' "$$PW" | go run ./cmd/createuser -email "$(email)" -role "$(role)"
+
 .PHONY: token
 token: ## In ra access token admin để gọi thử API (cần JWT_SECRET)
 	go run ./cmd/devtoken

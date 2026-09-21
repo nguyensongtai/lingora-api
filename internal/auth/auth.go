@@ -46,8 +46,18 @@ func NewVerifier(secret string) (*Verifier, error) {
 	return &Verifier{secret: []byte(secret)}, nil
 }
 
+// RequireAuthenticated trả về middleware chỉ bắt buộc token hợp lệ, không xét role.
+func (v *Verifier) RequireAuthenticated() func(http.Handler) http.Handler {
+	return v.middleware("")
+}
+
 // RequireRole trả về middleware bắt buộc token hợp lệ và đúng role.
 func (v *Verifier) RequireRole(role string) func(http.Handler) http.Handler {
+	return v.middleware(role)
+}
+
+// middleware với role rỗng nghĩa là chấp nhận mọi role.
+func (v *Verifier) middleware(role string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			raw, err := bearerToken(r)
@@ -64,7 +74,7 @@ func (v *Verifier) RequireRole(role string) func(http.Handler) http.Handler {
 				return
 			}
 
-			if claims.Role != role {
+			if role != "" && claims.Role != role {
 				httpx.Error(w, http.StatusForbidden, httpx.CodeForbidden, "Tài khoản không có quyền thực hiện thao tác này.", nil)
 				return
 			}

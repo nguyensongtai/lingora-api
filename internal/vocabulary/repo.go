@@ -259,3 +259,24 @@ func toEntry(row db.VocabularyEntry) Entry {
 		UpdatedAt: row.UpdatedAt,
 	}
 }
+
+// Unlocked cho biết người học đã hoàn thành bài chứa từ này hay chưa.
+func (r *Repo) Unlocked(ctx context.Context, userID, entryID string) (bool, error) {
+	user, err := parseID(userID)
+	if err != nil {
+		return false, err
+	}
+	entry, err := parseID(entryID)
+	if err != nil {
+		return false, err
+	}
+
+	unlocked, err := r.q.VocabularyEntryUnlocked(ctx, db.VocabularyEntryUnlockedParams{
+		UserID:  user,
+		EntryID: entry,
+	})
+	if err != nil {
+		return false, fmt.Errorf("check vocabulary %s unlocked: %w", entryID, err)
+	}
+	return unlocked, nil
+}

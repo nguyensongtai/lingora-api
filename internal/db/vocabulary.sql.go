@@ -366,3 +366,31 @@ func (q *Queries) UpsertVocabularyReview(ctx context.Context, arg UpsertVocabula
 	)
 	return i, err
 }
+
+const vocabularyEntryUnlocked = `-- name: VocabularyEntryUnlocked :one
+SELECT EXISTS (
+    SELECT 1
+    FROM vocabulary_entries AS e
+    JOIN lessons AS l ON l.id = e.lesson_id
+    JOIN courses AS c ON c.id = l.course_id
+    JOIN lesson_progress AS p ON p.lesson_id = l.id AND p.user_id = $1
+    WHERE e.id = $2
+      AND e.deleted_at IS NULL
+      AND l.deleted_at IS NULL
+      AND c.deleted_at IS NULL
+)::boolean
+`
+
+type VocabularyEntryUnlockedParams struct {
+	UserID  pgtype.UUID
+	EntryID pgtype.UUID
+}
+
+// Từ chỉ ôn được khi người học đã đánh dấu hoàn thành bài chứa nó. Kiểm bằng
+// một câu thay vì tải cả danh sách về rồi dò.
+func (q *Queries) VocabularyEntryUnlocked(ctx context.Context, arg VocabularyEntryUnlockedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, vocabularyEntryUnlocked, arg.UserID, arg.EntryID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}

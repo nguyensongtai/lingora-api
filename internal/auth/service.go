@@ -7,8 +7,10 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/golang-jwt/jwt/v5"
 
@@ -20,6 +22,7 @@ const refreshTokenBytes = 32
 
 // users là những gì Service cần ở kho danh tính.
 type users interface {
+	Create(ctx context.Context, params user.CreateParams) (user.User, error)
 	GetByEmail(ctx context.Context, email string) (user.User, error)
 	GetByID(ctx context.Context, id string) (user.User, error)
 }
@@ -72,6 +75,57 @@ func NewService(userRepo users, sessionRepo sessions, cfg Config) (*Service, err
 		refreshTTL: cfg.RefreshTTL,
 		now:        time.Now,
 	}, nil
+}
+
+// maxDisplayNameLen khớp với chỗ hiển thị hẹp nhất trong giao diện.
+const maxDisplayNameLen = 100
+
+// emailPattern chỉ chặn những chuỗi rõ ràng không phải email. Xác minh thật sự
+// là việc của email xác thực, không phải của regex.
+var emailPattern = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
+
+// Register tạo tài khoản học viên rồi đăng nhập luôn — người mới đăng ký không
+// có lý do gì phải nhập lại mật khẩu vừa đặt.
+//
+// Vai trò luôn là student: không có đường nào tự nhận quyền admin từ bên ngoài.
+func (s *Service) Register(ctx context.Context, email, password, displayName string) (TokenPair, error) {
+	email = strings.TrimSpace(email)
+	displayName = strings.TrimSpace(displayName)
+
+	var v validationBuilder
+	if !emailPattern.MatchString(email) {
+		v.add("email", "chưa đúng định dạng email")
+	}
+	if len([]rune(password)) < MinPasswordLen {
+		v.add("password", fmt.Sprintf("cần ít nhất %d ký tự", MinPasswordLen))
+	}
+	if displayName == "" {
+		v.add("display_name", "không được để trống")
+	} else if utf8.RuneCountInString(displayName) > maxDisplayNameLen {
+		v.add("display_name", fmt.Sprintf("tối đa %d ký tự", maxDisplayNameLen))
+	}
+	if err := v.err(); err != nil {
+		return TokenPair{}, err
+	}
+
+	hash, err := HashPassword(password)
+	if err != nil {
+		return TokenPair{}, fmt.Errorf("register: %w", err)
+	}
+
+	// Email trùng được phát hiện bằng unique index chứ không phải một câu SELECT
+	// đứng trước: hai lần đăng ký cùng lúc thì đúng một lần thắng.
+	created, err := s.users.Create(ctx, user.CreateParams{
+		Email:        email,
+		PasswordHash: hash,
+		DisplayName:  displayName,
+		Role:         user.RoleStudent,
+	})
+	if err != nil {
+		return TokenPair{}, fmt.Errorf("register: %w", err)
+	}
+
+	return s.issue(ctx, created)
 }
 
 // Login đổi email và mật khẩu lấy một cặp token.

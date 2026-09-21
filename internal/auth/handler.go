@@ -16,6 +16,7 @@ import (
 
 // service là những gì Handler cần ở tầng nghiệp vụ.
 type service interface {
+	Register(ctx context.Context, email, password, displayName string) (TokenPair, error)
 	Login(ctx context.Context, email, password string) (TokenPair, error)
 	Refresh(ctx context.Context, refreshToken string) (TokenPair, error)
 	Logout(ctx context.Context, refreshToken string) error
@@ -35,11 +36,27 @@ func NewHandler(svc service) *Handler {
 // Mount gắn route xác thực; authenticated bọc route cần token hợp lệ.
 func (h *Handler) Mount(r chi.Router, authenticated func(http.Handler) http.Handler) {
 	r.Route("/auth", func(r chi.Router) {
+		r.Post("/register", h.register)
 		r.Post("/login", h.login)
 		r.Post("/refresh", h.refresh)
 		r.Post("/logout", h.logout)
 		r.With(authenticated).Get("/me", h.me)
 	})
+}
+
+func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
+	var body api.RegisterRequest
+	if err := httpx.DecodeJSON(w, r, &body); err != nil {
+		writeMalformed(w, err)
+		return
+	}
+
+	pair, err := h.service.Register(r.Context(), body.Email, body.Password, body.DisplayName)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, toAPITokenPair(pair))
 }
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
@@ -157,7 +174,15 @@ func writeMalformed(w http.ResponseWriter, err error) {
 // writeError dịch sentinel sang mã HTTP. Sai thông tin đăng nhập và phiên hết
 // hạn đều là 401 để client chỉ cần xử lý một trường hợp: đăng nhập lại.
 func writeError(w http.ResponseWriter, r *http.Request, err error) {
+	var validationErr *ValidationError
+
 	switch {
+	case errors.As(err, &validationErr):
+		httpx.Error(w, http.StatusBadRequest, httpx.CodeValidation, "Dữ liệu không hợp lệ.", validationErr.Fields)
+	case errors.Is(err, user.ErrEmailTaken):
+		httpx.Error(w, http.StatusConflict, httpx.CodeConflict, "Email này đã có tài khoản.", map[string]string{
+			"email": "đã được đăng ký",
+		})
 	case errors.Is(err, ErrInvalidCredentials):
 		httpx.Error(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "Email hoặc mật khẩu không đúng.", nil)
 	case errors.Is(err, ErrSessionNotFound):

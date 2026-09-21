@@ -247,6 +247,15 @@ type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
+// RegisterRequest defines model for RegisterRequest.
+type RegisterRequest struct {
+	DisplayName string `json:"display_name"`
+	Email       string `json:"email"`
+
+	// Password Tối thiểu 12 ký tự.
+	Password string `json:"password"`
+}
+
 // TokenPair defines model for TokenPair.
 type TokenPair struct {
 	// AccessToken JWT HS256 dùng cho header Authorization.
@@ -322,6 +331,9 @@ type LogoutJSONRequestBody = RefreshRequest
 
 // RefreshSessionJSONRequestBody defines body for RefreshSession for application/json ContentType.
 type RefreshSessionJSONRequestBody = RefreshRequest
+
+// RegisterJSONRequestBody defines body for Register for application/json ContentType.
+type RegisterJSONRequestBody = RegisterRequest
 
 // CreateCourseJSONRequestBody defines body for CreateCourse for application/json ContentType.
 type CreateCourseJSONRequestBody = CourseCreate

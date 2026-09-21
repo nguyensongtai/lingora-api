@@ -13,8 +13,16 @@ import (
 type fakeUsers struct {
 	t *testing.T
 
+	create  func(context.Context, user.CreateParams) (user.User, error)
 	byEmail func(context.Context, string) (user.User, error)
 	byID    func(context.Context, string) (user.User, error)
+}
+
+func (f *fakeUsers) Create(ctx context.Context, params user.CreateParams) (user.User, error) {
+	if f.create == nil {
+		f.t.Fatal("Create called unexpectedly")
+	}
+	return f.create(ctx, params)
 }
 
 func (f *fakeUsers) GetByEmail(ctx context.Context, email string) (user.User, error) {
@@ -298,5 +306,90 @@ func TestPasswordHashIsSaltedPerCall(t *testing.T) {
 	}
 	if err := auth.VerifyPassword(first, "mat-khau-khac-han"); !errors.Is(err, auth.ErrInvalidCredentials) {
 		t.Errorf("VerifyPassword() with a wrong password gave %v, want ErrInvalidCredentials", err)
+	}
+}
+
+func TestRegisterCreatesAStudentAndLogsThemIn(t *testing.T) {
+	t.Parallel()
+
+	var got user.CreateParams
+	users := &fakeUsers{
+		t: t,
+		create: func(_ context.Context, params user.CreateParams) (user.User, error) {
+			got = params
+			return user.User{ID: "user-1", Email: params.Email, DisplayName: params.DisplayName, Role: params.Role}, nil
+		},
+	}
+
+	service := newService(t, users, newFakeSessions(t))
+	pair, err := service.Register(context.Background(), "  An@Example.com  ", "mat-khau-du-dai-2026", "  Nguyễn An  ")
+	if err != nil {
+		t.Fatalf("Register() returned error: %v", err)
+	}
+
+	// Vai trò do server quyết định, không nhận từ body — không có đường nào tự
+	// nhận quyền admin khi đăng ký.
+	if got.Role != user.RoleStudent {
+		t.Errorf("role = %q, want %q", got.Role, user.RoleStudent)
+	}
+	if got.Email != "An@Example.com" {
+		t.Errorf("email = %q, want nó được trim", got.Email)
+	}
+	if got.DisplayName != "Nguyễn An" {
+		t.Errorf("display_name = %q, want nó được trim", got.DisplayName)
+	}
+	if got.PasswordHash == "mat-khau-du-dai-2026" || got.PasswordHash == "" {
+		t.Errorf("password_hash = %q, want một hash bcrypt", got.PasswordHash)
+	}
+	if pair.AccessToken == "" || pair.RefreshToken == "" {
+		t.Error("Register() phải trả luôn cặp token, không bắt đăng nhập lại")
+	}
+}
+
+func TestRegisterRejectsBadInput(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		email, password, displayName string
+		field                        string
+	}{
+		"email sai định dạng": {"khong-phai-email", "mat-khau-du-dai-2026", "An", "email"},
+		"mật khẩu quá ngắn":   {"an@example.com", "ngan", "An", "password"},
+		"tên rỗng":            {"an@example.com", "mat-khau-du-dai-2026", "   ", "display_name"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			// create không được gọi: sai dữ liệu thì không chạm tới database.
+			service := newService(t, &fakeUsers{t: t}, newFakeSessions(t))
+
+			_, err := service.Register(context.Background(), tc.email, tc.password, tc.displayName)
+
+			var validationErr *auth.ValidationError
+			if !errors.As(err, &validationErr) {
+				t.Fatalf("Register() error = %v, want *ValidationError", err)
+			}
+			if _, ok := validationErr.Fields[tc.field]; !ok {
+				t.Errorf("Fields = %v, want có key %q", validationErr.Fields, tc.field)
+			}
+		})
+	}
+}
+
+func TestRegisterSurfacesDuplicateEmail(t *testing.T) {
+	t.Parallel()
+
+	users := &fakeUsers{
+		t: t,
+		create: func(context.Context, user.CreateParams) (user.User, error) {
+			return user.User{}, user.ErrEmailTaken
+		},
+	}
+
+	_, err := newService(t, users, newFakeSessions(t)).
+		Register(context.Background(), "an@example.com", "mat-khau-du-dai-2026", "An")
+
+	if !errors.Is(err, user.ErrEmailTaken) {
+		t.Fatalf("Register() error = %v, want ErrEmailTaken", err)
 	}
 }

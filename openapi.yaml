@@ -48,6 +48,32 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Tạo tài khoản học viên
+      description: |
+        Tạo tài khoản rồi đăng nhập luôn: trả về đúng cặp token như /auth/login.
+        Vai trò luôn là `student`; không có cách nào tự nhận quyền admin.
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Tài khoản mới kèm cặp token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
   /auth/refresh:
     post:
       tags: [auth]
@@ -563,6 +589,23 @@ components:
         created_at:
           type: string
           format: date-time
+
+    RegisterRequest:
+      type: object
+      required: [email, password, display_name]
+      properties:
+        email:
+          type: string
+          format: email
+          x-go-type: string
+        password:
+          type: string
+          format: password
+          minLength: 12
+          description: Tối thiểu 12 ký tự.
+        display_name:
+          type: string
+          maxLength: 100
 
     LoginRequest:
       type: object

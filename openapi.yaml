@@ -555,6 +555,201 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /vocabulary:
+    get:
+      tags: [vocabulary]
+      summary: Danh sách từ vựng của một bài
+      operationId: listVocabulary
+      parameters:
+        - name: lesson_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+            x-go-type: string
+      responses:
+        '200':
+          description: Từ của bài, theo thứ tự position
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VocabularyEntryList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+    post:
+      tags: [vocabulary]
+      summary: Thêm một từ vào bài
+      operationId: createVocabularyEntry
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VocabularyEntryCreate'
+      responses:
+        '201':
+          description: Từ vừa thêm
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VocabularyEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /vocabulary/{entryId}:
+    parameters:
+      - name: entryId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-go-type: string
+
+    patch:
+      tags: [vocabulary]
+      summary: Cập nhật một phần của từ
+      operationId: updateVocabularyEntry
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VocabularyEntryUpdate'
+      responses:
+        '200':
+          description: Từ sau khi cập nhật
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VocabularyEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+    delete:
+      tags: [vocabulary]
+      summary: Xoá mềm một từ
+      operationId: deleteVocabularyEntry
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Đã xoá
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /me/vocabulary:
+    get:
+      tags: [vocabulary]
+      summary: Từ vựng đã mở khoá của người đang đăng nhập
+      description: |
+        Chỉ gồm từ thuộc những bài người này đã đánh dấu hoàn thành. Chưa ôn lần
+        nào thì `review` là `null` và `state` là `due`.
+      operationId: listMyVocabulary
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: state
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/VocabularyState'
+      responses:
+        '200':
+          description: Danh sách thẻ từ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VocabularyCardList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /me/vocabulary/stats:
+    get:
+      tags: [vocabulary]
+      summary: Bốn ô thống kê của màn Từ vựng
+      operationId: getVocabularyStats
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Thống kê
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VocabularyStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /me/vocabulary/{entryId}/review:
+    parameters:
+      - name: entryId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-go-type: string
+
+    post:
+      tags: [vocabulary]
+      summary: Ghi nhận một lần ôn
+      description: |
+        Tính lịch tiếp theo theo SM-2. Từ thuộc bài chưa hoàn thành bị từ chối
+        với 403.
+      operationId: reviewVocabularyEntry
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VocabularyReviewRequest'
+      responses:
+        '200':
+          description: Lịch ôn sau lần này
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VocabularyReview'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -658,6 +853,179 @@ components:
         redirect_uri:
           type: string
           description: Đúng redirect_uri đã dùng ở bước chuyển hướng.
+
+    VocabularyState:
+      type: string
+      description: |
+        `due` đến hạn ôn (kể cả từ chưa ôn lần nào), `learning` đang học,
+        `mastered` khoảng cách ôn đã từ 21 ngày trở lên.
+      enum: [due, learning, mastered]
+
+    VocabularyEntry:
+      type: object
+      required: [id, lesson_id, word, ipa, meaning, example, example_vi, position, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          x-go-type: string
+        lesson_id:
+          type: string
+          format: uuid
+          x-go-type: string
+        word:
+          type: string
+          maxLength: 100
+        ipa:
+          type: string
+          maxLength: 100
+        meaning:
+          type: string
+          maxLength: 300
+        example:
+          type: string
+          maxLength: 500
+        example_vi:
+          type: string
+          maxLength: 500
+        position:
+          type: integer
+          format: int32
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    VocabularyEntryCreate:
+      type: object
+      required: [lesson_id, word, meaning]
+      properties:
+        lesson_id:
+          type: string
+          format: uuid
+          x-go-type: string
+        word:
+          type: string
+          maxLength: 100
+        ipa:
+          type: string
+          maxLength: 100
+        meaning:
+          type: string
+          maxLength: 300
+        example:
+          type: string
+          maxLength: 500
+        example_vi:
+          type: string
+          maxLength: 500
+
+    VocabularyEntryUpdate:
+      type: object
+      properties:
+        word:
+          type: string
+          maxLength: 100
+        ipa:
+          type: string
+          maxLength: 100
+        meaning:
+          type: string
+          maxLength: 300
+        example:
+          type: string
+          maxLength: 500
+        example_vi:
+          type: string
+          maxLength: 500
+
+    VocabularyEntryList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/VocabularyEntry'
+
+    VocabularyReview:
+      type: object
+      required: [ease_factor, interval_days, repetitions, due_on, last_reviewed_at]
+      properties:
+        ease_factor:
+          type: number
+          format: double
+        interval_days:
+          type: integer
+          format: int32
+        repetitions:
+          type: integer
+          format: int32
+        due_on:
+          type: string
+          format: date
+          x-go-type: string
+        last_reviewed_at:
+          type: string
+          format: date-time
+
+    VocabularyCard:
+      type: object
+      required: [entry, level, state, familiarity, review]
+      properties:
+        entry:
+          $ref: '#/components/schemas/VocabularyEntry'
+        level:
+          $ref: '#/components/schemas/CourseLevel'
+        state:
+          $ref: '#/components/schemas/VocabularyState'
+        familiarity:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 5
+          description: Số đốt sáng trên vạch 5 đốt.
+        review:
+          allOf:
+            - $ref: '#/components/schemas/VocabularyReview'
+          nullable: true
+          description: '`null` khi người học chưa ôn từ này lần nào.'
+
+    VocabularyCardList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/VocabularyCard'
+
+    VocabularyStats:
+      type: object
+      required: [learned, due_today, mastered, new_this_week]
+      properties:
+        learned:
+          type: integer
+          format: int64
+        due_today:
+          type: integer
+          format: int64
+        mastered:
+          type: integer
+          format: int64
+        new_this_week:
+          type: integer
+          format: int64
+
+    VocabularyReviewRequest:
+      type: object
+      required: [grade]
+      properties:
+        grade:
+          type: string
+          enum: [remembered, forgot]
 
     LoginRequest:
       type: object

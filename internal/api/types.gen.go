@@ -106,6 +106,45 @@ func (e UserRole) Valid() bool {
 	}
 }
 
+// Defines values for VocabularyReviewRequestGrade.
+const (
+	Forgot     VocabularyReviewRequestGrade = "forgot"
+	Remembered VocabularyReviewRequestGrade = "remembered"
+)
+
+// Valid indicates whether the value is a known member of the VocabularyReviewRequestGrade enum.
+func (e VocabularyReviewRequestGrade) Valid() bool {
+	switch e {
+	case Forgot:
+		return true
+	case Remembered:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VocabularyState.
+const (
+	Due      VocabularyState = "due"
+	Learning VocabularyState = "learning"
+	Mastered VocabularyState = "mastered"
+)
+
+// Valid indicates whether the value is a known member of the VocabularyState enum.
+func (e VocabularyState) Valid() bool {
+	switch e {
+	case Due:
+		return true
+	case Learning:
+		return true
+	case Mastered:
+		return true
+	default:
+		return false
+	}
+}
+
 // Course defines model for Course.
 type Course struct {
 	CoverImageUrl *string   `json:"cover_image_url"`
@@ -313,6 +352,96 @@ type User struct {
 // UserRole defines model for UserRole.
 type UserRole string
 
+// VocabularyCard defines model for VocabularyCard.
+type VocabularyCard struct {
+	Entry VocabularyEntry `json:"entry"`
+
+	// Familiarity Số đốt sáng trên vạch 5 đốt.
+	Familiarity int32 `json:"familiarity"`
+
+	// Level Trình độ theo khung CEFR.
+	Level CourseLevel `json:"level"`
+
+	// Review `null` khi người học chưa ôn từ này lần nào.
+	Review *VocabularyReview `json:"review"`
+
+	// State `due` đến hạn ôn (kể cả từ chưa ôn lần nào), `learning` đang học,
+	// `mastered` khoảng cách ôn đã từ 21 ngày trở lên.
+	State VocabularyState `json:"state"`
+}
+
+// VocabularyCardList defines model for VocabularyCardList.
+type VocabularyCardList struct {
+	Items []VocabularyCard `json:"items"`
+}
+
+// VocabularyEntry defines model for VocabularyEntry.
+type VocabularyEntry struct {
+	CreatedAt time.Time `json:"created_at"`
+	Example   string    `json:"example"`
+	ExampleVi string    `json:"example_vi"`
+	Id        string    `json:"id"`
+	Ipa       string    `json:"ipa"`
+	LessonId  string    `json:"lesson_id"`
+	Meaning   string    `json:"meaning"`
+	Position  int32     `json:"position"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Word      string    `json:"word"`
+}
+
+// VocabularyEntryCreate defines model for VocabularyEntryCreate.
+type VocabularyEntryCreate struct {
+	Example   *string `json:"example,omitempty"`
+	ExampleVi *string `json:"example_vi,omitempty"`
+	Ipa       *string `json:"ipa,omitempty"`
+	LessonId  string  `json:"lesson_id"`
+	Meaning   string  `json:"meaning"`
+	Word      string  `json:"word"`
+}
+
+// VocabularyEntryList defines model for VocabularyEntryList.
+type VocabularyEntryList struct {
+	Items []VocabularyEntry `json:"items"`
+}
+
+// VocabularyEntryUpdate defines model for VocabularyEntryUpdate.
+type VocabularyEntryUpdate struct {
+	Example   *string `json:"example,omitempty"`
+	ExampleVi *string `json:"example_vi,omitempty"`
+	Ipa       *string `json:"ipa,omitempty"`
+	Meaning   *string `json:"meaning,omitempty"`
+	Word      *string `json:"word,omitempty"`
+}
+
+// VocabularyReview defines model for VocabularyReview.
+type VocabularyReview struct {
+	DueOn          string    `json:"due_on"`
+	EaseFactor     float64   `json:"ease_factor"`
+	IntervalDays   int32     `json:"interval_days"`
+	LastReviewedAt time.Time `json:"last_reviewed_at"`
+	Repetitions    int32     `json:"repetitions"`
+}
+
+// VocabularyReviewRequest defines model for VocabularyReviewRequest.
+type VocabularyReviewRequest struct {
+	Grade VocabularyReviewRequestGrade `json:"grade"`
+}
+
+// VocabularyReviewRequestGrade defines model for VocabularyReviewRequest.Grade.
+type VocabularyReviewRequestGrade string
+
+// VocabularyState `due` đến hạn ôn (kể cả từ chưa ôn lần nào), `learning` đang học,
+// `mastered` khoảng cách ôn đã từ 21 ngày trở lên.
+type VocabularyState string
+
+// VocabularyStats defines model for VocabularyStats.
+type VocabularyStats struct {
+	DueToday    int64 `json:"due_today"`
+	Learned     int64 `json:"learned"`
+	Mastered    int64 `json:"mastered"`
+	NewThisWeek int64 `json:"new_this_week"`
+}
+
 // CourseId defines model for CourseId.
 type CourseId = string
 
@@ -355,6 +484,16 @@ type ListCoursesParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// ListMyVocabularyParams defines parameters for ListMyVocabulary.
+type ListMyVocabularyParams struct {
+	State *VocabularyState `form:"state,omitempty" json:"state,omitempty"`
+}
+
+// ListVocabularyParams defines parameters for ListVocabulary.
+type ListVocabularyParams struct {
+	LessonId string `form:"lesson_id" json:"lesson_id"`
+}
+
 // SignInWithGoogleJSONRequestBody defines body for SignInWithGoogle for application/json ContentType.
 type SignInWithGoogleJSONRequestBody = GoogleSignInRequest
 
@@ -384,3 +523,12 @@ type ReorderLessonsJSONRequestBody = LessonOrder
 
 // UpdateLessonJSONRequestBody defines body for UpdateLesson for application/json ContentType.
 type UpdateLessonJSONRequestBody = LessonUpdate
+
+// ReviewVocabularyEntryJSONRequestBody defines body for ReviewVocabularyEntry for application/json ContentType.
+type ReviewVocabularyEntryJSONRequestBody = VocabularyReviewRequest
+
+// CreateVocabularyEntryJSONRequestBody defines body for CreateVocabularyEntry for application/json ContentType.
+type CreateVocabularyEntryJSONRequestBody = VocabularyEntryCreate
+
+// UpdateVocabularyEntryJSONRequestBody defines body for UpdateVocabularyEntry for application/json ContentType.
+type UpdateVocabularyEntryJSONRequestBody = VocabularyEntryUpdate

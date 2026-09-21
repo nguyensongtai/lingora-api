@@ -67,8 +67,9 @@ func Schedule(current *Review, grade Grade, today time.Time) Review {
 		interval = int32(math.Round(float64(previous) * ease))
 	}
 
-	// q = 5: EF + (0.1 - 0*(0.08 + 0*0.02)) = EF + 0.1
-	ease = math.Max(minEaseFactor, ease+0.1)
+	// q = 5: EF + (0.1 - 0*(0.08 + 0*0.02)) = EF + 0.1. Làm tròn hai chữ số để
+	// cộng dồn nhiều lần không đẻ ra 2.8000000000000003 trong response.
+	ease = math.Round(math.Max(minEaseFactor, ease+0.1)*100) / 100
 
 	return Review{
 		EaseFactor:     ease,

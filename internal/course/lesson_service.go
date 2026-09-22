@@ -31,10 +31,15 @@ func (s *Service) CreateLesson(ctx context.Context, courseID string, params Less
 }
 
 // GetLesson đọc một bài theo id.
-func (s *Service) GetLesson(ctx context.Context, lessonID string) (Lesson, error) {
+func (s *Service) GetLesson(ctx context.Context, viewer Viewer, lessonID string) (Lesson, error) {
 	found, err := s.repo.GetLesson(ctx, lessonID)
 	if err != nil {
 		return Lesson{}, fmt.Errorf("get lesson: %w", err)
+	}
+	// Bài không có status riêng; nó thừa hưởng của khoá. Đọc thẳng bằng id sẽ
+	// đi vòng qua khoá nháp nếu không hỏi lại đúng một lần nữa.
+	if _, err := s.Get(ctx, viewer, found.CourseID); err != nil {
+		return Lesson{}, fmt.Errorf("get lesson %s: %w", lessonID, err)
 	}
 	return found, nil
 }

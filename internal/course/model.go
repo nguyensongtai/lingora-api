@@ -43,6 +43,21 @@ func (s Status) Valid() bool {
 	}
 }
 
+// Viewer là người đang đọc nội dung. Chỉ admin được thấy khoá chưa xuất bản —
+// draft nghĩa là người soạn chưa muốn ai đọc, nên nó không phải thứ để lọc
+// theo yêu cầu của client mà là thứ chặn theo người gọi.
+//
+// Giá trị rỗng là khách vãng lai, nên quên gắn viewer sẽ thành lộ ít đi chứ
+// không lộ thêm.
+type Viewer struct {
+	IsAdmin bool
+}
+
+// CanSee cho biết viewer có được đọc khoá ở trạng thái này không.
+func (v Viewer) CanSee(status Status) bool {
+	return v.IsAdmin || status == StatusPublished
+}
+
 // Course là model nghiệp vụ; id dùng string để tầng trên không phụ thuộc pgtype.
 type Course struct {
 	ID            string

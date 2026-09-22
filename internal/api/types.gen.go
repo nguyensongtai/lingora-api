@@ -492,6 +492,8 @@ type Unauthorized = Error
 
 // ListCoursesParams defines parameters for ListCourses.
 type ListCoursesParams struct {
+	// Status Chỉ có tác dụng với token admin. Người gọi khác luôn nhận `published`,
+	// và nếu xin `draft` thì nhận một trang rỗng.
 	Status *StatusFilter `form:"status,omitempty" json:"status,omitempty"`
 	Level  *LevelFilter  `form:"level,omitempty" json:"level,omitempty"`
 

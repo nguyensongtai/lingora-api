@@ -275,6 +275,9 @@ paths:
     get:
       tags: [courses]
       summary: Lấy khoá học theo id
+      description: |
+        Khoá `draft` chỉ admin đọc được; người khác nhận 404 chứ không phải 403,
+        vì 403 đã xác nhận bản ghi đó tồn tại.
       operationId: getCourse
       responses:
         '200':
@@ -343,6 +346,9 @@ paths:
     get:
       tags: [courses]
       summary: Lấy khoá học theo slug
+      description: |
+        Khoá `draft` chỉ admin đọc được; người khác nhận 404 chứ không phải 403,
+        vì 403 đã xác nhận bản ghi đó tồn tại.
       operationId: getCourseBySlug
       parameters:
         - name: slug
@@ -371,6 +377,9 @@ paths:
       description: |
         Sắp xếp theo `position` tăng dần. Khoá không tồn tại trả về 404; khoá có
         thật nhưng chưa có bài trả về mảng rỗng.
+
+        Bài không có trạng thái riêng, nó thừa hưởng của khoá: bài thuộc khoá
+        `draft` chỉ admin đọc được, người khác cũng nhận 404.
       operationId: listCourseLessons
       responses:
         '200':
@@ -459,6 +468,9 @@ paths:
     get:
       tags: [courses]
       summary: Lấy bài học theo id
+      description: |
+        Bài không có trạng thái riêng, nó thừa hưởng của khoá: bài thuộc khoá
+        `draft` chỉ admin đọc được, người khác nhận 404.
       operationId: getLesson
       responses:
         '200':
@@ -805,6 +817,9 @@ components:
       name: status
       in: query
       required: false
+      description: |
+        Chỉ có tác dụng với token admin. Người gọi khác luôn nhận `published`,
+        và nếu xin `draft` thì nhận một trang rỗng.
       schema:
         $ref: '#/components/schemas/CourseStatus'
 

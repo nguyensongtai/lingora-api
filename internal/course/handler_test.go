@@ -12,12 +12,18 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/golang-jwt/jwt/v5"
 
+	"github.com/nguyensongtai/lingora-api/internal/auth"
 	"github.com/nguyensongtai/lingora-api/internal/course"
 )
 
 type fakeService struct {
 	t *testing.T
+
+	// lastViewer giữ viewer của lần đọc gần nhất, để test kiểm handler có
+	// thực sự dựng nó từ token hay không.
+	lastViewer course.Viewer
 
 	createFn      func(context.Context, course.CreateParams) (course.Course, error)
 	getFn         func(context.Context, string) (course.Course, error)
@@ -44,21 +50,24 @@ func (f *fakeService) Create(ctx context.Context, params course.CreateParams) (c
 	return f.createFn(ctx, params)
 }
 
-func (f *fakeService) Get(ctx context.Context, id string) (course.Course, error) {
+func (f *fakeService) Get(ctx context.Context, viewer course.Viewer, id string) (course.Course, error) {
+	f.lastViewer = viewer
 	if f.getFn == nil {
 		f.t.Fatal("Get called unexpectedly")
 	}
 	return f.getFn(ctx, id)
 }
 
-func (f *fakeService) GetBySlug(ctx context.Context, slug string) (course.Course, error) {
+func (f *fakeService) GetBySlug(ctx context.Context, viewer course.Viewer, slug string) (course.Course, error) {
+	f.lastViewer = viewer
 	if f.getBySlugFn == nil {
 		f.t.Fatal("GetBySlug called unexpectedly")
 	}
 	return f.getBySlugFn(ctx, slug)
 }
 
-func (f *fakeService) List(ctx context.Context, filter course.ListFilter) (course.Page, error) {
+func (f *fakeService) List(ctx context.Context, viewer course.Viewer, filter course.ListFilter) (course.Page, error) {
+	f.lastViewer = viewer
 	if f.listFn == nil {
 		f.t.Fatal("List called unexpectedly")
 	}
@@ -79,7 +88,8 @@ func (f *fakeService) Delete(ctx context.Context, id string) error {
 	return f.deleteFn(ctx, id)
 }
 
-func (f *fakeService) ListLessons(ctx context.Context, courseID string) ([]course.Lesson, error) {
+func (f *fakeService) ListLessons(ctx context.Context, viewer course.Viewer, courseID string) ([]course.Lesson, error) {
+	f.lastViewer = viewer
 	if f.listLessonsFn == nil {
 		f.t.Fatal("ListLessons called unexpectedly")
 	}
@@ -89,7 +99,8 @@ func (f *fakeService) ListLessons(ctx context.Context, courseID string) ([]cours
 // newServer gắn route thật; adminOnly là no-op vì quyền được test riêng ở package auth.
 func newServer(svc *fakeService) http.Handler {
 	router := chi.NewRouter()
-	course.NewHandler(svc).Mount(router, func(next http.Handler) http.Handler { return next })
+	noop := func(next http.Handler) http.Handler { return next }
+	course.NewHandler(svc).Mount(router, noop, noop)
 	return router
 }
 
@@ -470,7 +481,8 @@ func (f *fakeService) CreateLesson(ctx context.Context, courseID string, params 
 	return f.createLessonFn(ctx, courseID, params)
 }
 
-func (f *fakeService) GetLesson(ctx context.Context, lessonID string) (course.Lesson, error) {
+func (f *fakeService) GetLesson(ctx context.Context, viewer course.Viewer, lessonID string) (course.Lesson, error) {
+	f.lastViewer = viewer
 	if f.getLessonFn == nil {
 		f.t.Fatal("GetLesson called unexpectedly")
 	}
@@ -594,6 +606,78 @@ func TestLessonErrorMapping(t *testing.T) {
 			}
 			if code := decodeBody(t, recorder)["code"]; code != tc.wantCode {
 				t.Errorf("code = %v, want %q", code, tc.wantCode)
+			}
+		})
+	}
+}
+
+/* ---------- handler dựng viewer từ token thật ---------- */
+
+const handlerTestSecret = "secret-du-dai-cho-hs256-toi-thieu-32-byte"
+
+// serverWithAuth gắn đúng middleware OptionalAuth thật, để test đi qua cả
+// đường token → claims → viewer chứ không giả lập khúc giữa.
+func serverWithAuth(t *testing.T, svc *fakeService) http.Handler {
+	t.Helper()
+
+	verifier, err := auth.NewVerifier(handlerTestSecret)
+	if err != nil {
+		t.Fatalf("NewVerifier() returned error: %v", err)
+	}
+
+	router := chi.NewRouter()
+	noop := func(next http.Handler) http.Handler { return next }
+	course.NewHandler(svc).Mount(router, noop, verifier.OptionalAuth())
+	return router
+}
+
+func bearerFor(t *testing.T, role string) string {
+	t.Helper()
+
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub":  "user-1",
+		"role": role,
+		"exp":  time.Now().Add(time.Hour).Unix(),
+	}).SignedString([]byte(handlerTestSecret))
+	if err != nil {
+		t.Fatalf("sign token: %v", err)
+	}
+	return "Bearer " + token
+}
+
+func TestHandlerBuildsViewerFromToken(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name          string
+		authorization string
+		wantAdmin     bool
+	}{
+		{name: "không token", authorization: "", wantAdmin: false},
+		{name: "token student", authorization: bearerFor(t, "student"), wantAdmin: false},
+		{name: "token admin", authorization: bearerFor(t, "admin"), wantAdmin: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			svc := &fakeService{t: t, listFn: func(context.Context, course.ListFilter) (course.Page, error) {
+				return course.Page{Items: []course.Course{}}, nil
+			}}
+			req := httptest.NewRequest(http.MethodGet, "/courses", nil)
+			if tc.authorization != "" {
+				req.Header.Set("Authorization", tc.authorization)
+			}
+			recorder := httptest.NewRecorder()
+
+			serverWithAuth(t, svc).ServeHTTP(recorder, req)
+
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200", recorder.Code)
+			}
+			if svc.lastViewer.IsAdmin != tc.wantAdmin {
+				t.Errorf("viewer.IsAdmin = %t, want %t", svc.lastViewer.IsAdmin, tc.wantAdmin)
 			}
 		})
 	}

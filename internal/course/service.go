@@ -88,27 +88,36 @@ func (s *Service) Create(ctx context.Context, params CreateParams) (Course, erro
 	return created, nil
 }
 
-// Get đọc một khoá học theo id.
-func (s *Service) Get(ctx context.Context, id string) (Course, error) {
+// Get đọc một khoá học theo id. Khoá nháp trả ErrNotFound cho người không
+// phải admin — 404 chứ không phải 403, vì 403 đã là một câu trả lời: nó xác
+// nhận id đó có tồn tại.
+func (s *Service) Get(ctx context.Context, viewer Viewer, id string) (Course, error) {
 	found, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return Course{}, fmt.Errorf("get course: %w", err)
+	}
+	if !viewer.CanSee(found.Status) {
+		return Course{}, fmt.Errorf("get course %s: %w", id, ErrNotFound)
 	}
 	return found, nil
 }
 
 // GetBySlug đọc một khoá học theo slug, dùng cho URL thân thiện phía web.
-func (s *Service) GetBySlug(ctx context.Context, slug string) (Course, error) {
-	found, err := s.repo.GetBySlug(ctx, strings.ToLower(strings.TrimSpace(slug)))
+func (s *Service) GetBySlug(ctx context.Context, viewer Viewer, slug string) (Course, error) {
+	normalized := strings.ToLower(strings.TrimSpace(slug))
+	found, err := s.repo.GetBySlug(ctx, normalized)
 	if err != nil {
 		return Course{}, fmt.Errorf("get course by slug: %w", err)
+	}
+	if !viewer.CanSee(found.Status) {
+		return Course{}, fmt.Errorf("get course by slug %s: %w", normalized, ErrNotFound)
 	}
 	return found, nil
 }
 
 // List trả về một trang khoá học. Repo được hỏi dư một bản ghi để biết còn
 // trang sau hay không mà không cần đếm tổng.
-func (s *Service) List(ctx context.Context, filter ListFilter) (Page, error) {
+func (s *Service) List(ctx context.Context, viewer Viewer, filter ListFilter) (Page, error) {
 	var v validationBuilder
 	if filter.Status != nil && !filter.Status.Valid() {
 		v.add("status", "phải là draft hoặc published")
@@ -118,6 +127,17 @@ func (s *Service) List(ctx context.Context, filter ListFilter) (Page, error) {
 	}
 	if err := v.err(); err != nil {
 		return Page{}, err
+	}
+
+	// Người không phải admin luôn bị ép về published, kể cả khi không truyền
+	// status. Xin đích danh draft thì nhận trang rỗng: đó là sự thật với họ,
+	// và nó không tiết lộ là có bao nhiêu bản nháp đang tồn tại.
+	if !viewer.IsAdmin {
+		if filter.Status != nil && *filter.Status != StatusPublished {
+			return Page{Items: []Course{}}, nil
+		}
+		published := StatusPublished
+		filter.Status = &published
 	}
 
 	pageSize := clampPageSize(filter.PageSize)
@@ -191,13 +211,11 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 
 // ListLessons trả về bài học của một khoá. Khoá không tồn tại là ErrNotFound,
 // khác hẳn với khoá tồn tại nhưng chưa có bài nào (danh sách rỗng).
-func (s *Service) ListLessons(ctx context.Context, courseID string) ([]Lesson, error) {
-	exists, err := s.repo.Exists(ctx, courseID)
-	if err != nil {
+func (s *Service) ListLessons(ctx context.Context, viewer Viewer, courseID string) ([]Lesson, error) {
+	// Hỏi cả khoá thay vì chỉ Exists: bài của một khoá nháp cũng là nội dung
+	// chưa xuất bản, nên phải biết status mới trả lời được.
+	if _, err := s.Get(ctx, viewer, courseID); err != nil {
 		return nil, fmt.Errorf("list lessons: %w", err)
-	}
-	if !exists {
-		return nil, fmt.Errorf("list lessons of course %s: %w", courseID, ErrNotFound)
 	}
 
 	lessons, err := s.repo.ListLessons(ctx, courseID)

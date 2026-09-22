@@ -123,7 +123,7 @@ func run() error {
 
 	router.Route("/v1", func(r chi.Router) {
 		authHandler.Mount(r, verifier.RequireAuthenticated())
-		courseHandler.Mount(r, verifier.RequireRole(auth.RoleAdmin))
+		courseHandler.Mount(r, verifier.RequireRole(auth.RoleAdmin), verifier.OptionalAuth())
 		progressHandler.Mount(r, verifier.RequireAuthenticated())
 		vocabularyHandler.Mount(r, verifier.RequireRole(auth.RoleAdmin), verifier.RequireAuthenticated())
 	})

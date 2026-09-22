@@ -14,20 +14,21 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/nguyensongtai/lingora-api/internal/api"
+	"github.com/nguyensongtai/lingora-api/internal/auth"
 	"github.com/nguyensongtai/lingora-api/internal/httpx"
 )
 
 // service là những gì Handler cần ở tầng nghiệp vụ.
 type service interface {
 	Create(ctx context.Context, params CreateParams) (Course, error)
-	Get(ctx context.Context, id string) (Course, error)
-	GetBySlug(ctx context.Context, slug string) (Course, error)
-	List(ctx context.Context, filter ListFilter) (Page, error)
+	Get(ctx context.Context, viewer Viewer, id string) (Course, error)
+	GetBySlug(ctx context.Context, viewer Viewer, slug string) (Course, error)
+	List(ctx context.Context, viewer Viewer, filter ListFilter) (Page, error)
 	Update(ctx context.Context, id string, params UpdateParams) (Course, error)
 	Delete(ctx context.Context, id string) error
-	ListLessons(ctx context.Context, courseID string) ([]Lesson, error)
+	ListLessons(ctx context.Context, viewer Viewer, courseID string) ([]Lesson, error)
 	CreateLesson(ctx context.Context, courseID string, params LessonCreateParams) (Lesson, error)
-	GetLesson(ctx context.Context, lessonID string) (Lesson, error)
+	GetLesson(ctx context.Context, viewer Viewer, lessonID string) (Lesson, error)
 	UpdateLesson(ctx context.Context, lessonID string, params LessonUpdateParams) (Lesson, error)
 	DeleteLesson(ctx context.Context, lessonID string) error
 	ReorderLessons(ctx context.Context, courseID string, lessonIDs []string) error
@@ -44,12 +45,17 @@ func NewHandler(svc service) *Handler {
 	return &Handler{service: svc}
 }
 
-// Mount gắn route của domain course; adminOnly bọc toàn bộ thao tác ghi.
-func (h *Handler) Mount(r chi.Router, adminOnly func(http.Handler) http.Handler) {
+// Mount gắn route của domain course. adminOnly bọc toàn bộ thao tác ghi;
+// optionalAuth bọc các route đọc, vốn công khai nhưng trả nội dung khác nhau
+// cho khách và cho admin.
+func (h *Handler) Mount(r chi.Router, adminOnly, optionalAuth func(http.Handler) http.Handler) {
 	r.Route("/courses", func(r chi.Router) {
-		r.Get("/", h.list)
-		r.Get("/by-slug/{slug}", h.getBySlug)
-		r.Get("/{courseID}", h.get)
+		r.Group(func(r chi.Router) {
+			r.Use(optionalAuth)
+			r.Get("/", h.list)
+			r.Get("/by-slug/{slug}", h.getBySlug)
+			r.Get("/{courseID}", h.get)
+		})
 
 		r.Group(func(r chi.Router) {
 			r.Use(adminOnly)
@@ -63,7 +69,7 @@ func (h *Handler) Mount(r chi.Router, adminOnly func(http.Handler) http.Handler)
 
 		// Bộ sưu tập bài học lồng dưới khoá.
 		r.Route("/{courseID}/lessons", func(r chi.Router) {
-			r.Get("/", h.listLessons)
+			r.With(optionalAuth).Get("/", h.listLessons)
 
 			r.Group(func(r chi.Router) {
 				r.Use(adminOnly)
@@ -75,7 +81,7 @@ func (h *Handler) Mount(r chi.Router, adminOnly func(http.Handler) http.Handler)
 
 	// Thao tác trên từng bài nằm phẳng: sửa hay xoá không cần biết khoá nào.
 	r.Route("/lessons", func(r chi.Router) {
-		r.Get("/{lessonID}", h.getLesson)
+		r.With(optionalAuth).Get("/{lessonID}", h.getLesson)
 
 		r.Group(func(r chi.Router) {
 			r.Use(adminOnly)
@@ -149,7 +155,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
-	found, err := h.service.Get(r.Context(), chi.URLParam(r, "courseID"))
+	found, err := h.service.Get(r.Context(), viewerFrom(r), chi.URLParam(r, "courseID"))
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -158,7 +164,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getBySlug(w http.ResponseWriter, r *http.Request) {
-	found, err := h.service.GetBySlug(r.Context(), chi.URLParam(r, "slug"))
+	found, err := h.service.GetBySlug(r.Context(), viewerFrom(r), chi.URLParam(r, "slug"))
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -173,7 +179,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	page, err := h.service.List(r.Context(), filter)
+	page, err := h.service.List(r.Context(), viewerFrom(r), filter)
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -232,7 +238,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listLessons(w http.ResponseWriter, r *http.Request) {
-	lessons, err := h.service.ListLessons(r.Context(), chi.URLParam(r, "courseID"))
+	lessons, err := h.service.ListLessons(r.Context(), viewerFrom(r), chi.URLParam(r, "courseID"))
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -243,6 +249,13 @@ func (h *Handler) listLessons(w http.ResponseWriter, r *http.Request) {
 		items = append(items, toAPILesson(lesson))
 	}
 	httpx.JSON(w, http.StatusOK, api.LessonList{Items: items})
+}
+
+// viewerFrom dựng người đọc từ claims mà optionalAuth gắn vào. Không có claims
+// nghĩa là khách vãng lai, đó là trường hợp bình thường ở đây chứ không phải lỗi.
+func viewerFrom(r *http.Request) Viewer {
+	claims, ok := auth.ClaimsFrom(r.Context())
+	return Viewer{IsAdmin: ok && claims.Role == auth.RoleAdmin}
 }
 
 /* ---------- query, cursor, lỗi ---------- */

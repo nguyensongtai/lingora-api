@@ -31,7 +31,7 @@ func (h *Handler) createLesson(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getLesson(w http.ResponseWriter, r *http.Request) {
-	found, err := h.service.GetLesson(r.Context(), chi.URLParam(r, "lessonID"))
+	found, err := h.service.GetLesson(r.Context(), viewerFrom(r), chi.URLParam(r, "lessonID"))
 	if err != nil {
 		writeError(w, r, err)
 		return

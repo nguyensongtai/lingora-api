@@ -104,6 +104,9 @@ func run() error {
 	router.Use(
 		middleware.RequestID,
 		middleware.RealIP,
+		// Logger đứng trước Recoverer để một panic vẫn để lại đúng một dòng
+		// request kèm status 500, chứ không biến mất khỏi log truy cập.
+		httpx.RequestLogger,
 		middleware.Recoverer,
 		middleware.Timeout(30*time.Second),
 		httpx.CORS(cfg.CORSAllowedOrigins),

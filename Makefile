@@ -46,6 +46,7 @@ seed: ## Nạp dữ liệu mẫu cho môi trường dev (cần docker compose up
 	docker compose exec -T postgres psql -U lingora -d lingora -v ON_ERROR_STOP=1 < db/seed/001_sample_courses.sql
 	docker compose exec -T postgres psql -U lingora -d lingora -v ON_ERROR_STOP=1 < db/seed/002_curriculum.sql
 	docker compose exec -T postgres psql -U lingora -d lingora -v ON_ERROR_STOP=1 < db/seed/004_vocabulary.sql
+	docker compose exec -T postgres psql -U lingora -d lingora -v ON_ERROR_STOP=1 < db/seed/005_lesson_content.sql
 
 .PHONY: verify-vocab
 verify-vocab: ## Đối chiếu bậc CEFR của từ vựng với dữ liệu nguồn (cần mạng)

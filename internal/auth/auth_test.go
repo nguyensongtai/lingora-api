@@ -166,3 +166,82 @@ func TestRequireRoleRejectsBadTokens(t *testing.T) {
 		})
 	}
 }
+
+// optional trả về handler bọc OptionalAuth, kèm role mà next đọc được từ
+// context — chuỗi rỗng nghĩa là next nhìn thấy một người đọc ẩn danh.
+func optional(t *testing.T) (http.Handler, *string) {
+	t.Helper()
+
+	verifier, err := auth.NewVerifier(testSecret)
+	if err != nil {
+		t.Fatalf("NewVerifier() returned error: %v", err)
+	}
+
+	var seen string
+	handler := verifier.OptionalAuth()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if claims, ok := auth.ClaimsFrom(r.Context()); ok {
+			seen = claims.Role
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	return handler, &seen
+}
+
+func TestOptionalAuthPassesAnonymousThrough(t *testing.T) {
+	handler, seen := optional(t)
+
+	recorder := call(handler, "")
+
+	if recorder.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", recorder.Code)
+	}
+	if *seen != "" {
+		t.Errorf("claims role = %q, want none for an anonymous request", *seen)
+	}
+}
+
+func TestOptionalAuthAttachesValidClaims(t *testing.T) {
+	handler, seen := optional(t)
+	token := sign(t, jwt.SigningMethodHS256, []byte(testSecret), adminClaims(time.Now().Add(time.Hour)))
+
+	recorder := call(handler, "Bearer "+token)
+
+	if recorder.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", recorder.Code)
+	}
+	if *seen != auth.RoleAdmin {
+		t.Errorf("claims role = %q, want %q", *seen, auth.RoleAdmin)
+	}
+}
+
+// Token xấu phải rơi về ẩn danh chứ không được vừa lọt vừa mang claims: đó là
+// khác biệt giữa "không chặn ai" và "tin bất cứ thứ gì gửi lên".
+func TestOptionalAuthIgnoresBadTokens(t *testing.T) {
+	expired := sign(t, jwt.SigningMethodHS256, []byte(testSecret), adminClaims(time.Now().Add(-time.Hour)))
+	wrongKey := sign(t, jwt.SigningMethodHS256, []byte("khoa-khac-nhung-van-du-32-byte-de-ky-duoc"), adminClaims(time.Now().Add(time.Hour)))
+	noExpiry := sign(t, jwt.SigningMethodHS256, []byte(testSecret), jwt.MapClaims{"sub": "user-1", "role": auth.RoleAdmin})
+
+	cases := map[string]string{
+		"hết hạn":      "Bearer " + expired,
+		"sai khoá ký":  "Bearer " + wrongKey,
+		"không có exp": "Bearer " + noExpiry,
+		"rác":          "Bearer khong-phai-jwt",
+		"sai scheme":   "Basic " + expired,
+		"thiếu token":  "Bearer ",
+	}
+
+	for name, header := range cases {
+		t.Run(name, func(t *testing.T) {
+			handler, seen := optional(t)
+
+			recorder := call(handler, header)
+
+			if recorder.Code != http.StatusOK {
+				t.Errorf("status = %d, want 200: route công khai không được vì token xấu mà chặn", recorder.Code)
+			}
+			if *seen != "" {
+				t.Errorf("claims role = %q, want none: token xấu không được mở thêm quyền", *seen)
+			}
+		})
+	}
+}

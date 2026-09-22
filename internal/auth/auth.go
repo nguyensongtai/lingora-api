@@ -56,6 +56,34 @@ func (v *Verifier) RequireRole(role string) func(http.Handler) http.Handler {
 	return v.middleware(role)
 }
 
+// OptionalAuth đọc token nếu có và gắn claims vào context, nhưng không chặn ai
+// cả. Dùng cho route công khai mà nội dung trả về vẫn phụ thuộc người đọc —
+// ví dụ khoá học: khách thấy khoá đã xuất bản, admin thấy cả bản nháp.
+//
+// Token hỏng hay hết hạn bị coi như không có, chứ không trả 401: route này vốn
+// mở cho khách, nên một token cũ trong tab bỏ quên không được phép biến nó
+// thành lỗi. Hệ quả là token xấu không bao giờ mở thêm được gì.
+func (v *Verifier) OptionalAuth() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			raw, err := bearerToken(r)
+			if err != nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			claims, err := v.parse(raw)
+			if err != nil {
+				slog.WarnContext(r.Context(), "ignore access token on public route", slog.Any("error", err))
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), contextKey{}, claims)))
+		})
+	}
+}
+
 // middleware với role rỗng nghĩa là chấp nhận mọi role.
 func (v *Verifier) middleware(role string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

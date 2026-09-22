@@ -157,6 +157,7 @@ token có role `admin`.
 | `POST` | `/courses/{courseId}/lessons` | admin |
 | `PUT` | `/courses/{courseId}/lessons/order` | admin |
 | `PATCH` | `/lessons/{lessonId}` | admin |
+| `PUT` | `/lessons/{lessonId}/blocks` | admin |
 | `DELETE` | `/lessons/{lessonId}` | admin |
 
 ¹ Năm route đọc này công khai nhưng **nội dung phụ thuộc người gọi**: gửi kèm
@@ -172,6 +173,16 @@ Phân trang là **keyset** trên `(created_at DESC, id DESC)`, không phải off
 `cursor` là chuỗi mờ base64url lấy từ `next_cursor` của trang trước, `next_cursor`
 rỗng nghĩa là hết dữ liệu. Chọn keyset vì offset sẽ nhảy hoặc lặp bản ghi khi có
 khoá mới chen vào giữa lúc người dùng đang lật trang.
+
+`GET /lessons/{id}` trả bài kèm **nội dung**: một danh sách khối có thứ tự, mỗi
+khối là `note` (đoạn giải thích tiếng Việt), `example` (câu mẫu Anh–Việt) hoặc
+`dialogue` (như `example`, kèm tên người nói). Mỗi dạng chỉ dùng một phần các
+trường, và ràng buộc `lesson_blocks_shape` trong database bắt đúng phần đó phải
+có còn phần thừa phải rỗng.
+
+`PUT /lessons/{id}/blocks` thay **cả danh sách**, giống hai endpoint `order`:
+soạn bài là việc viết lại và kéo thả, nên gửi trọn trạng thái mong muốn đơn
+giản hơn một chuỗi thêm/sửa/xoá/đổi chỗ. Gửi mảng rỗng là xoá sạch nội dung bài.
 
 Hai endpoint `order` nhận **toàn bộ** mảng id của phạm vi đang sắp — cả bậc với
 `/courses/order`, cả khoá với `/lessons/order`. Thiếu một id, thừa một id, hay

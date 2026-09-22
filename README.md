@@ -31,7 +31,7 @@ Redis (chỉ để đếm hạn mức), JWT HS256, bcrypt.
 make up                  # postgres:18 + redis:8 qua docker compose
 cp .env.example .env     # sửa JWT_SECRET
 make migrate-up          # áp dụng migration
-make seed                # dữ liệu mẫu (tuỳ chọn)
+make seed                # giáo trình mẫu: 13 khoá, 52 bài, 292 từ
 make dev                 # http://localhost:8080/healthz
 ```
 
@@ -41,6 +41,20 @@ shell hay trong danh sách tiến trình:
 ```bash
 make createuser email=admin@lingora.vn role=admin
 ```
+
+`make seed` nạp giáo trình mẫu phủ đủ sáu bậc CEFR — đủ khoá, bài và từ vựng để
+mọi màn hình có gì hiển thị. Chạy lại được nhiều lần, không nhân đôi dữ liệu.
+
+Muốn xem màn Tiến độ và Luyện tập ở trạng thái đã có lịch sử thì tạo thêm một
+tài khoản demo rồi nạp tiến độ mẫu cho nó — 24 bài trải trên 30 ngày:
+
+```bash
+make createuser email=demo@lingora.vn role=student
+make seed-demo
+```
+
+`seed-demo` chỉ đụng tới đúng tài khoản đó. Chưa tạo thì nó không làm gì và
+cũng không báo lỗi.
 
 `make help` liệt kê toàn bộ target.
 
@@ -324,7 +338,7 @@ internal/
 └── vocabulary/    # từ vựng và SM-2
 db/migrations/     # golang-migrate, đánh số tuần tự
 db/query/          # input của sqlc
-db/seed/           # dữ liệu mẫu cho dev
+db/seed/           # giáo trình mẫu cho dev
 ```
 
 Mỗi domain là một package trong `internal/<domain>`, xếp ba tầng

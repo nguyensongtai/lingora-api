@@ -7,6 +7,7 @@ package testdb
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -75,38 +76,82 @@ func connect(dsn string) (*pgxpool.Pool, error) {
 	return created, nil
 }
 
+// schemaLockKey là khoá advisory lock cho việc dựng schema. Giá trị tuỳ ý,
+// chỉ cần mọi tiến trình test dùng chung một số.
+const schemaLockKey int64 = 0x1_0206_2A11
+
 // ensureSchema chạy các migration lên nếu database còn trống. Database đã có
 // schema thì không đụng tới — chạy lại migration trên database dev sẽ hỏng.
+//
+// `go test ./...` chạy mỗi package trong MỘT TIẾN TRÌNH RIÊNG, tất cả trỏ vào
+// cùng một database, nên sync.Once ở trên không đủ. Hai lớp chống đua:
+//
+//   - advisory lock để đúng một tiến trình dựng schema, những tiến trình khác
+//     chờ tới lượt rồi mới kiểm tra — thay vì kiểm xong mới biết là vừa đua;
+//   - toàn bộ migration nằm trong một transaction, nên không tiến trình nào
+//     nhìn thấy schema dựng dở. Trước đây mốc kiểm là bảng `courses` do
+//     migration đầu tiên tạo, nên một tiến trình có thể thấy nó rồi bỏ qua
+//     trong khi các migration sau chưa chạy — CI đỏ vì thiếu cột `position`
+//     và `google_sub`.
 func ensureSchema(ctx context.Context, pool *pgxpool.Pool) error {
+	// Lock nằm trên session nên phải giữ nguyên một connection.
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+
+	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", schemaLockKey); err != nil {
+		return err
+	}
+	defer func() {
+		_, _ = conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", schemaLockKey)
+	}()
+
 	var exists *string
-	if err := pool.QueryRow(ctx, "SELECT to_regclass('public.courses')::text").Scan(&exists); err != nil {
+	if err := conn.QueryRow(ctx, "SELECT to_regclass('public.courses')::text").Scan(&exists); err != nil {
 		return err
 	}
 	if exists != nil {
 		return nil
 	}
 
-	dir, err := migrationsDir()
+	files, err := migrationFiles()
 	if err != nil {
 		return err
 	}
-	files, err := filepath.Glob(filepath.Join(dir, "*.up.sql"))
+
+	tx, err := conn.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	// Tên file có tiền tố số thứ tự nên sắp theo tên là đúng thứ tự migration.
-	sort.Strings(files)
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 
 	for _, file := range files {
 		statements, err := os.ReadFile(file)
 		if err != nil {
 			return err
 		}
-		if _, err := pool.Exec(ctx, string(statements)); err != nil {
-			return err
+		if _, err := tx.Exec(ctx, string(statements)); err != nil {
+			return fmt.Errorf("apply %s: %w", filepath.Base(file), err)
 		}
 	}
-	return nil
+	return tx.Commit(ctx)
+}
+
+// migrationFiles trả về các file .up.sql theo đúng thứ tự migration.
+func migrationFiles() ([]string, error) {
+	dir, err := migrationsDir()
+	if err != nil {
+		return nil, err
+	}
+	files, err := filepath.Glob(filepath.Join(dir, "*.up.sql"))
+	if err != nil {
+		return nil, err
+	}
+	// Tên file có tiền tố số thứ tự nên sắp theo tên là đúng thứ tự migration.
+	sort.Strings(files)
+	return files, nil
 }
 
 // migrationsDir đi ngược lên từ thư mục của test cho tới khi thấy db/migrations.

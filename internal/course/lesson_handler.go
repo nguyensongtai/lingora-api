@@ -31,12 +31,67 @@ func (h *Handler) createLesson(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getLesson(w http.ResponseWriter, r *http.Request) {
-	found, err := h.service.GetLesson(r.Context(), viewerFrom(r), chi.URLParam(r, "lessonID"))
+	found, err := h.service.GetLessonDetail(r.Context(), viewerFrom(r), chi.URLParam(r, "lessonID"))
 	if err != nil {
 		writeError(w, r, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, toAPILesson(found))
+
+	lesson := toAPILesson(found.Lesson)
+	httpx.JSON(w, http.StatusOK, api.LessonDetail{
+		Id:        lesson.Id,
+		CourseId:  lesson.CourseId,
+		Slug:      lesson.Slug,
+		Title:     lesson.Title,
+		Summary:   lesson.Summary,
+		Position:  lesson.Position,
+		CreatedAt: lesson.CreatedAt,
+		UpdatedAt: lesson.UpdatedAt,
+		Blocks:    toAPIBlocks(found.Blocks),
+	})
+}
+
+func (h *Handler) replaceLessonBlocks(w http.ResponseWriter, r *http.Request) {
+	var body api.LessonBlockList
+	if err := httpx.DecodeJSON(w, r, &body); err != nil {
+		httpx.Error(w, http.StatusBadRequest, httpx.CodeMalformed, "Body không phải JSON hợp lệ.", nil)
+		return
+	}
+
+	blocks := make([]Block, 0, len(body.Blocks))
+	for _, item := range body.Blocks {
+		blocks = append(blocks, Block{
+			Kind:    BlockKind(item.Kind),
+			Body:    item.Body,
+			TextEN:  item.TextEn,
+			TextVI:  item.TextVi,
+			Speaker: item.Speaker,
+		})
+	}
+
+	if err := h.service.ReplaceBlocks(r.Context(), chi.URLParam(r, "lessonID"), blocks); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// toAPIBlocks giữ slice rỗng thành [] chứ không null: spec khai báo mảng và
+// phía trước lặp thẳng trên nó.
+func toAPIBlocks(blocks []Block) []api.LessonBlock {
+	out := make([]api.LessonBlock, 0, len(blocks))
+	for _, block := range blocks {
+		id := block.ID
+		out = append(out, api.LessonBlock{
+			Id:      &id,
+			Kind:    api.LessonBlockKind(block.Kind),
+			Body:    block.Body,
+			TextEn:  block.TextEN,
+			TextVi:  block.TextVI,
+			Speaker: block.Speaker,
+		})
+	}
+	return out
 }
 
 func (h *Handler) updateLesson(w http.ResponseWriter, r *http.Request) {
@@ -85,6 +140,7 @@ func toAPILesson(item Lesson) api.Lesson {
 		CourseId:  item.CourseID,
 		Slug:      item.Slug,
 		Title:     item.Title,
+		Summary:   item.Summary,
 		Position:  item.Position,
 		CreatedAt: item.CreatedAt,
 		UpdatedAt: item.UpdatedAt,

@@ -28,7 +28,8 @@ type service interface {
 	Delete(ctx context.Context, id string) error
 	ListLessons(ctx context.Context, viewer Viewer, courseID string) ([]Lesson, error)
 	CreateLesson(ctx context.Context, courseID string, params LessonCreateParams) (Lesson, error)
-	GetLesson(ctx context.Context, viewer Viewer, lessonID string) (Lesson, error)
+	GetLessonDetail(ctx context.Context, viewer Viewer, lessonID string) (LessonDetail, error)
+	ReplaceBlocks(ctx context.Context, lessonID string, blocks []Block) error
 	UpdateLesson(ctx context.Context, lessonID string, params LessonUpdateParams) (Lesson, error)
 	DeleteLesson(ctx context.Context, lessonID string) error
 	ReorderLessons(ctx context.Context, courseID string, lessonIDs []string) error
@@ -86,6 +87,7 @@ func (h *Handler) Mount(r chi.Router, adminOnly, optionalAuth func(http.Handler)
 		r.Group(func(r chi.Router) {
 			r.Use(adminOnly)
 			r.Patch("/{lessonID}", h.updateLesson)
+			r.Put("/{lessonID}/blocks", h.replaceLessonBlocks)
 			r.Delete("/{lessonID}", h.deleteLesson)
 		})
 	})

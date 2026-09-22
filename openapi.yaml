@@ -480,11 +480,11 @@ paths:
       operationId: getLesson
       responses:
         '200':
-          description: Bài học
+          description: Bài học kèm nội dung
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Lesson'
+                $ref: '#/components/schemas/LessonDetail'
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
@@ -531,6 +531,46 @@ paths:
       responses:
         '204':
           description: Đã xoá
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /lessons/{lessonId}/blocks:
+    parameters:
+      - name: lessonId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-go-type: string
+
+    put:
+      tags: [courses]
+      summary: Thay toàn bộ nội dung của một bài
+      description: |
+        Nhận cả danh sách chứ không sửa từng khối: soạn bài là việc kéo thả và
+        viết lại, nên gửi trọn trạng thái mong muốn đơn giản hơn nhiều so với
+        một chuỗi thao tác thêm/sửa/xoá/đổi chỗ.
+
+        `position` không có trong body — thứ tự chính là thứ tự của mảng.
+      operationId: replaceLessonBlocks
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LessonBlockList'
+      responses:
+        '204':
+          description: Đã thay nội dung
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1328,7 +1368,7 @@ components:
 
     Lesson:
       type: object
-      required: [id, course_id, slug, title, position, created_at, updated_at]
+      required: [id, course_id, slug, title, summary, position, created_at, updated_at]
       properties:
         id:
           type: string
@@ -1342,6 +1382,9 @@ components:
           type: string
         title:
           type: string
+        summary:
+          type: string
+          description: Đoạn dẫn ngắn hiện ngay dưới tiêu đề bài; có thể rỗng.
         position:
           type: integer
           format: int32
@@ -1352,6 +1395,68 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    LessonBlockKind:
+      type: string
+      enum: [note, example, dialogue]
+      description: |
+        `note` là đoạn giải thích tiếng Việt, `example` là câu mẫu Anh–Việt,
+        `dialogue` giống `example` nhưng có tên người nói.
+
+    LessonBlock:
+      type: object
+      required: [kind, body, text_en, text_vi, speaker]
+      description: |
+        Mỗi dạng chỉ dùng một phần các trường, phần còn lại phải là chuỗi rỗng:
+
+        | kind | trường bắt buộc | phải rỗng |
+        | --- | --- | --- |
+        | `note` | `body` | `text_en`, `text_vi`, `speaker` |
+        | `example` | `text_en` | `body`, `speaker` |
+        | `dialogue` | `text_en`, `speaker` | `body` |
+
+        Database có ràng buộc bắt đúng hình dạng này, nên gửi sai là 400 chứ
+        không phải một khối trống giữa bài.
+      properties:
+        id:
+          type: string
+          format: uuid
+          x-go-type: string
+          description: Chỉ có khi đọc; lúc ghi thì bỏ qua vì cả danh sách được thay mới.
+        kind:
+          $ref: '#/components/schemas/LessonBlockKind'
+        body:
+          type: string
+        text_en:
+          type: string
+        text_vi:
+          type: string
+        speaker:
+          type: string
+
+    LessonBlockList:
+      type: object
+      required: [blocks]
+      description: |
+        Thay TOÀN BỘ nội dung của bài. Gửi mảng rỗng là xoá sạch nội dung — đó
+        là cách duy nhất để làm việc đó, và nó có chủ đích.
+      properties:
+        blocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/LessonBlock'
+
+    LessonDetail:
+      allOf:
+        - $ref: '#/components/schemas/Lesson'
+        - type: object
+          required: [blocks]
+          properties:
+            blocks:
+              type: array
+              description: Nội dung bài theo đúng thứ tự hiển thị.
+              items:
+                $ref: '#/components/schemas/LessonBlock'
 
     LessonCreate:
       type: object
@@ -1376,6 +1481,9 @@ components:
         title:
           type: string
           maxLength: 200
+        summary:
+          type: string
+          maxLength: 1000
 
     LessonOrder:
       type: object

@@ -94,6 +94,27 @@ func (e ErrorCode) Valid() bool {
 	}
 }
 
+// Defines values for LessonBlockKind.
+const (
+	Dialogue LessonBlockKind = "dialogue"
+	Example  LessonBlockKind = "example"
+	Note     LessonBlockKind = "note"
+)
+
+// Valid indicates whether the value is a known member of the LessonBlockKind enum.
+func (e LessonBlockKind) Valid() bool {
+	switch e {
+	case Dialogue:
+		return true
+	case Example:
+		return true
+	case Note:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PracticeKind.
 const (
 	FillBlank      PracticeKind = "fill_blank"
@@ -292,14 +313,67 @@ type Lesson struct {
 	Id        string    `json:"id"`
 	Position  int32     `json:"position"`
 	Slug      string    `json:"slug"`
+
+	// Summary Đoạn dẫn ngắn hiện ngay dưới tiêu đề bài; có thể rỗng.
+	Summary   string    `json:"summary"`
 	Title     string    `json:"title"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// LessonBlock Mỗi dạng chỉ dùng một phần các trường, phần còn lại phải là chuỗi rỗng:
+//
+// | kind | trường bắt buộc | phải rỗng |
+// | --- | --- | --- |
+// | `note` | `body` | `text_en`, `text_vi`, `speaker` |
+// | `example` | `text_en` | `body`, `speaker` |
+// | `dialogue` | `text_en`, `speaker` | `body` |
+//
+// Database có ràng buộc bắt đúng hình dạng này, nên gửi sai là 400 chứ
+// không phải một khối trống giữa bài.
+type LessonBlock struct {
+	Body string `json:"body"`
+
+	// Id Chỉ có khi đọc; lúc ghi thì bỏ qua vì cả danh sách được thay mới.
+	Id *string `json:"id,omitempty"`
+
+	// Kind `note` là đoạn giải thích tiếng Việt, `example` là câu mẫu Anh–Việt,
+	// `dialogue` giống `example` nhưng có tên người nói.
+	Kind    LessonBlockKind `json:"kind"`
+	Speaker string          `json:"speaker"`
+	TextEn  string          `json:"text_en"`
+	TextVi  string          `json:"text_vi"`
+}
+
+// LessonBlockKind `note` là đoạn giải thích tiếng Việt, `example` là câu mẫu Anh–Việt,
+// `dialogue` giống `example` nhưng có tên người nói.
+type LessonBlockKind string
+
+// LessonBlockList Thay TOÀN BỘ nội dung của bài. Gửi mảng rỗng là xoá sạch nội dung — đó
+// là cách duy nhất để làm việc đó, và nó có chủ đích.
+type LessonBlockList struct {
+	Blocks []LessonBlock `json:"blocks"`
 }
 
 // LessonCreate defines model for LessonCreate.
 type LessonCreate struct {
 	Slug  string `json:"slug"`
 	Title string `json:"title"`
+}
+
+// LessonDetail defines model for LessonDetail.
+type LessonDetail struct {
+	// Blocks Nội dung bài theo đúng thứ tự hiển thị.
+	Blocks    []LessonBlock `json:"blocks"`
+	CourseId  string        `json:"course_id"`
+	CreatedAt time.Time     `json:"created_at"`
+	Id        string        `json:"id"`
+	Position  int32         `json:"position"`
+	Slug      string        `json:"slug"`
+
+	// Summary Đoạn dẫn ngắn hiện ngay dưới tiêu đề bài; có thể rỗng.
+	Summary   string    `json:"summary"`
+	Title     string    `json:"title"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // LessonList defines model for LessonList.
@@ -315,8 +389,9 @@ type LessonOrder struct {
 
 // LessonUpdate defines model for LessonUpdate.
 type LessonUpdate struct {
-	Slug  *string `json:"slug,omitempty"`
-	Title *string `json:"title,omitempty"`
+	Slug    *string `json:"slug,omitempty"`
+	Summary *string `json:"summary,omitempty"`
+	Title   *string `json:"title,omitempty"`
 }
 
 // LoginRequest defines model for LoginRequest.
@@ -661,6 +736,9 @@ type ReorderLessonsJSONRequestBody = LessonOrder
 
 // UpdateLessonJSONRequestBody defines body for UpdateLesson for application/json ContentType.
 type UpdateLessonJSONRequestBody = LessonUpdate
+
+// ReplaceLessonBlocksJSONRequestBody defines body for ReplaceLessonBlocks for application/json ContentType.
+type ReplaceLessonBlocksJSONRequestBody = LessonBlockList
 
 // CheckPracticeAnswerJSONRequestBody defines body for CheckPracticeAnswer for application/json ContentType.
 type CheckPracticeAnswerJSONRequestBody = PracticeAnswer

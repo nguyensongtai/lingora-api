@@ -25,6 +25,12 @@ type fakeService struct {
 	// thực sự dựng nó từ token hay không.
 	lastViewer course.Viewer
 
+	// blocks là nội dung mà GetLessonDetail trả kèm.
+	blocks          []course.Block
+	replaceBlocksFn func(context.Context, string, []course.Block) error
+	replacedFor     string
+	replacedBlocks  []course.Block
+
 	createFn      func(context.Context, course.CreateParams) (course.Course, error)
 	getFn         func(context.Context, string) (course.Course, error)
 	getBySlugFn   func(context.Context, string) (course.Course, error)
@@ -481,12 +487,25 @@ func (f *fakeService) CreateLesson(ctx context.Context, courseID string, params 
 	return f.createLessonFn(ctx, courseID, params)
 }
 
-func (f *fakeService) GetLesson(ctx context.Context, viewer course.Viewer, lessonID string) (course.Lesson, error) {
+func (f *fakeService) GetLessonDetail(ctx context.Context, viewer course.Viewer, lessonID string) (course.LessonDetail, error) {
 	f.lastViewer = viewer
 	if f.getLessonFn == nil {
-		f.t.Fatal("GetLesson called unexpectedly")
+		f.t.Fatal("GetLessonDetail called unexpectedly")
 	}
-	return f.getLessonFn(ctx, lessonID)
+	lesson, err := f.getLessonFn(ctx, lessonID)
+	if err != nil {
+		return course.LessonDetail{}, err
+	}
+	return course.LessonDetail{Lesson: lesson, Blocks: f.blocks}, nil
+}
+
+func (f *fakeService) ReplaceBlocks(ctx context.Context, lessonID string, blocks []course.Block) error {
+	f.replacedFor = lessonID
+	f.replacedBlocks = blocks
+	if f.replaceBlocksFn == nil {
+		return nil
+	}
+	return f.replaceBlocksFn(ctx, lessonID, blocks)
 }
 
 func (f *fakeService) UpdateLesson(ctx context.Context, lessonID string, params course.LessonUpdateParams) (course.Lesson, error) {

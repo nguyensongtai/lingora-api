@@ -554,6 +554,34 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /me/progress/history:
+    get:
+      tags: [progress]
+      summary: Lịch sử học dài ngày
+      operationId: getProgressHistory
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: days
+          in: query
+          required: false
+          description: |
+            Số ngày muốn xem, mặc định 30, trần 365. Giá trị ngoài khoảng bị
+            kẹp về biên chứ không báo lỗi — đây là tham số hiển thị, một con số
+            vô lý trên URL không đáng làm hỏng cả màn hình.
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Lịch sử học
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressHistory'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /me/progress/lessons/{lessonId}:
     parameters:
       - name: lessonId
@@ -1364,6 +1392,55 @@ components:
           format: date
           x-go-type: string
         completed_lessons:
+          type: integer
+          format: int64
+
+    ProgressHistory:
+      type: object
+      description: |
+        Bức tranh dài hạn, dùng cho màn Tiến độ. `ProgressSnapshot` trả lời
+        "hôm nay thế nào", cái này trả lời "từ trước tới giờ thế nào".
+      required:
+        - days
+        - total_lessons
+        - total_xp
+        - active_days
+        - current_streak
+        - longest_streak
+        - xp_per_lesson
+        - goal_xp
+      properties:
+        days:
+          type: array
+          description: |
+            Dải ngày liên tục kết thúc ở hôm nay, cũ trước mới sau. Ngày không
+            học vẫn có mặt với `completed_lessons` bằng 0.
+          items:
+            $ref: '#/components/schemas/DayActivity'
+        total_lessons:
+          type: integer
+          format: int64
+          description: Tổng số bài đã hoàn thành, tính trên cả đời chứ không giới hạn trong `days`.
+        total_xp:
+          type: integer
+          format: int64
+        active_days:
+          type: integer
+          format: int64
+          description: Số ngày có học, đếm trong phạm vi `days`.
+        current_streak:
+          type: integer
+          format: int64
+        longest_streak:
+          type: integer
+          format: int64
+          description: |
+            Dải liên tiếp dài nhất **trong phạm vi `days`**, không phải kỷ lục
+            mọi thời. Hỏi 30 ngày thì đây là "dài nhất trong 30 ngày qua".
+        xp_per_lesson:
+          type: integer
+          format: int64
+        goal_xp:
           type: integer
           format: int64
 

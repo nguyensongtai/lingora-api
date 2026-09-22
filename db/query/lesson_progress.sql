@@ -65,3 +65,15 @@ WHERE p.user_id = sqlc.arg('user_id')
 GROUP BY 1
 ORDER BY 1 DESC
 LIMIT 400;
+
+-- name: CountCompletedLessons :one
+-- Tổng của cả đời, không giới hạn ngày. ListDailyCompletions cắt ở 400 ngày
+-- cho chuỗi thời gian, nên tổng phải đếm riêng chứ không cộng từ đó — người
+-- học lâu năm sẽ thấy một con số thiếu mà không biết vì sao.
+SELECT count(*)::bigint
+FROM lesson_progress AS p
+JOIN lessons AS l ON l.id = p.lesson_id
+JOIN courses AS c ON c.id = l.course_id
+WHERE p.user_id = sqlc.arg('user_id')
+  AND l.deleted_at IS NULL
+  AND c.deleted_at IS NULL;

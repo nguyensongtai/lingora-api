@@ -23,6 +23,7 @@ type fakeService struct {
 	completeFn   func(context.Context, string, string) error
 	uncompleteFn func(context.Context, string, string) error
 	snapshotFn   func(context.Context, string) (progress.Snapshot, error)
+	historyFn    func(context.Context, string, int64) (progress.History, error)
 }
 
 func (f *fakeService) Complete(ctx context.Context, userID, lessonID string) error {
@@ -44,6 +45,13 @@ func (f *fakeService) Snapshot(ctx context.Context, userID string) (progress.Sna
 		f.t.Fatal("Snapshot called unexpectedly")
 	}
 	return f.snapshotFn(ctx, userID)
+}
+
+func (f *fakeService) History(ctx context.Context, userID string, days int64) (progress.History, error) {
+	if f.historyFn == nil {
+		f.t.Fatal("History called unexpectedly")
+	}
+	return f.historyFn(ctx, userID, days)
 }
 
 // mount dựng router thật kèm middleware auth thật, để test đi qua đúng đường

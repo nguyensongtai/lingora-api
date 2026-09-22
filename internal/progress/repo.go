@@ -133,6 +133,20 @@ func (r *Repo) DailyActivity(ctx context.Context, userID string) ([]DayActivity,
 	return days, nil
 }
 
+// CompletedCount đếm tổng số bài đã hoàn thành, không giới hạn thời gian.
+func (r *Repo) CompletedCount(ctx context.Context, userID string) (int64, error) {
+	user, err := parseID(userID)
+	if err != nil {
+		return 0, err
+	}
+
+	total, err := r.q.CountCompletedLessons(ctx, user)
+	if err != nil {
+		return 0, fmt.Errorf("count completed lessons of %s: %w", userID, err)
+	}
+	return total, nil
+}
+
 func parseID(raw string) (pgtype.UUID, error) {
 	id, err := postgres.ParseUUID(raw)
 	if err != nil {

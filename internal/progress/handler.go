@@ -6,6 +6,8 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -20,6 +22,7 @@ type service interface {
 	Complete(ctx context.Context, userID, lessonID string) error
 	Uncomplete(ctx context.Context, userID, lessonID string) error
 	Snapshot(ctx context.Context, userID string) (Snapshot, error)
+	History(ctx context.Context, userID string, days int64) (History, error)
 }
 
 // Handler ánh xạ HTTP sang nghiệp vụ tiến độ.
@@ -37,6 +40,7 @@ func (h *Handler) Mount(r chi.Router, authenticated func(http.Handler) http.Hand
 	r.Route("/me/progress", func(r chi.Router) {
 		r.Use(authenticated)
 		r.Get("/", h.snapshot)
+		r.Get("/history", h.history)
 		r.Put("/lessons/{lessonId}", h.complete)
 		r.Delete("/lessons/{lessonId}", h.uncomplete)
 	})
@@ -70,13 +74,7 @@ func (h *Handler) snapshot(w http.ResponseWriter, r *http.Request) {
 		completed = []string{}
 	}
 
-	week := make([]api.DayActivity, 0, len(found.Week))
-	for _, day := range found.Week {
-		week = append(week, api.DayActivity{
-			Date:             day.Day.Format(time.DateOnly),
-			CompletedLessons: day.Completed,
-		})
-	}
+	week := toAPIDays(found.Week)
 
 	writeJSON(w, r, http.StatusOK, api.ProgressSnapshot{
 		Courses:            courses,
@@ -114,6 +112,47 @@ func (h *Handler) uncomplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) history(w http.ResponseWriter, r *http.Request) {
+	userID, ok := currentUser(w, r)
+	if !ok {
+		return
+	}
+
+	// Tham số hỏng cũng đi tiếp với 0, và service kẹp nó về mặc định: days là
+	// tuỳ chọn hiển thị, không phải dữ liệu người dùng nhập.
+	days, _ := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("days")), 10, 64)
+
+	found, err := h.service.History(r.Context(), userID, days)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
+	writeJSON(w, r, http.StatusOK, api.ProgressHistory{
+		Days:          toAPIDays(found.Days),
+		TotalLessons:  found.TotalLessons,
+		TotalXp:       found.TotalXP,
+		ActiveDays:    found.ActiveDays,
+		CurrentStreak: found.CurrentStreak,
+		LongestStreak: found.LongestStreak,
+		XpPerLesson:   found.XPPerLesson,
+		GoalXp:        found.GoalXP,
+	})
+}
+
+// toAPIDays đổi chuỗi ngày sang dạng của spec. Slice nil thành [] chứ không
+// phải null: spec khai báo mảng và phía trước lặp thẳng trên nó.
+func toAPIDays(days []DayActivity) []api.DayActivity {
+	out := make([]api.DayActivity, 0, len(days))
+	for _, day := range days {
+		out = append(out, api.DayActivity{
+			Date:             day.Day.Format(time.DateOnly),
+			CompletedLessons: day.Completed,
+		})
+	}
+	return out
 }
 
 // currentUser đọc subject mà middleware đã gắn. Thiếu claims nghĩa là route bị

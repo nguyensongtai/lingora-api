@@ -29,6 +29,26 @@ func (q *Queries) CompleteLesson(ctx context.Context, arg CompleteLessonParams) 
 	return err
 }
 
+const countCompletedLessons = `-- name: CountCompletedLessons :one
+SELECT count(*)::bigint
+FROM lesson_progress AS p
+JOIN lessons AS l ON l.id = p.lesson_id
+JOIN courses AS c ON c.id = l.course_id
+WHERE p.user_id = $1
+  AND l.deleted_at IS NULL
+  AND c.deleted_at IS NULL
+`
+
+// Tổng của cả đời, không giới hạn ngày. ListDailyCompletions cắt ở 400 ngày
+// cho chuỗi thời gian, nên tổng phải đếm riêng chứ không cộng từ đó — người
+// học lâu năm sẽ thấy một con số thiếu mà không biết vì sao.
+func (q *Queries) CountCompletedLessons(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countCompletedLessons, userID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const latestCompletedCourse = `-- name: LatestCompletedCourse :one
 SELECT l.course_id
 FROM lesson_progress AS p

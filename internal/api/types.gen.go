@@ -304,6 +304,28 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+// ProgressHistory Bức tranh dài hạn, dùng cho màn Tiến độ. `ProgressSnapshot` trả lời
+// "hôm nay thế nào", cái này trả lời "từ trước tới giờ thế nào".
+type ProgressHistory struct {
+	// ActiveDays Số ngày có học, đếm trong phạm vi `days`.
+	ActiveDays    int64 `json:"active_days"`
+	CurrentStreak int64 `json:"current_streak"`
+
+	// Days Dải ngày liên tục kết thúc ở hôm nay, cũ trước mới sau. Ngày không
+	// học vẫn có mặt với `completed_lessons` bằng 0.
+	Days   []DayActivity `json:"days"`
+	GoalXp int64         `json:"goal_xp"`
+
+	// LongestStreak Dải liên tiếp dài nhất **trong phạm vi `days`**, không phải kỷ lục
+	// mọi thời. Hỏi 30 ngày thì đây là "dài nhất trong 30 ngày qua".
+	LongestStreak int64 `json:"longest_streak"`
+
+	// TotalLessons Tổng số bài đã hoàn thành, tính trên cả đời chứ không giới hạn trong `days`.
+	TotalLessons int64 `json:"total_lessons"`
+	TotalXp      int64 `json:"total_xp"`
+	XpPerLesson  int64 `json:"xp_per_lesson"`
+}
+
 // ProgressSnapshot defines model for ProgressSnapshot.
 type ProgressSnapshot struct {
 	// CompletedLessonIds Id các bài đã đánh dấu xong, mới nhất trước.
@@ -505,6 +527,14 @@ type ListCoursesParams struct {
 
 	// Cursor Chuỗi mờ lấy từ `next_cursor` của trang trước.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// GetProgressHistoryParams defines parameters for GetProgressHistory.
+type GetProgressHistoryParams struct {
+	// Days Số ngày muốn xem, mặc định 30, trần 365. Giá trị ngoài khoảng bị
+	// kẹp về biên chứ không báo lỗi — đây là tham số hiển thị, một con số
+	// vô lý trên URL không đáng làm hỏng cả màn hình.
+	Days *int64 `form:"days,omitempty" json:"days,omitempty"`
 }
 
 // ListMyVocabularyParams defines parameters for ListMyVocabulary.

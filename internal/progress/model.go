@@ -35,6 +35,33 @@ type Snapshot struct {
 	Week []DayActivity
 }
 
+// History là bức tranh dài hạn của một người học, dùng cho màn Tiến độ.
+// Snapshot trả lời "hôm nay thế nào", History trả lời "từ trước tới giờ thế nào".
+type History struct {
+	// Days là dải ngày liên tục kết thúc ở hôm nay, cũ trước mới sau, kể cả
+	// ngày không học — biểu đồ cần đủ cột, khoảng trống cũng là thông tin.
+	Days []DayActivity
+
+	// TotalLessons đếm trên cả đời chứ không cộng từ Days: Days bị cắt ở
+	// DailyActivityLimit ngày.
+	TotalLessons int64
+	TotalXP      int64
+
+	// ActiveDays và LongestStreak tính trong phạm vi Days.
+	ActiveDays    int64
+	CurrentStreak int64
+	LongestStreak int64
+
+	XPPerLesson int64
+	GoalXP      int64
+}
+
+// Giới hạn số ngày một lần đọc History trả về.
+const (
+	DefaultHistoryDays int64 = 30
+	MaxHistoryDays     int64 = 365
+)
+
 // XPPerLesson: mỗi bài đánh dấu xong được 20 XP. Con số lấy từ chính design —
 // mục tiêu 50 XP, đã được 30, và dòng chữ dưới vòng tròn ghi "Còn 20 XP · một
 // bài học nữa".

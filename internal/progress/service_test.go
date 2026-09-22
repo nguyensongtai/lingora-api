@@ -45,6 +45,14 @@ type fakeRepo struct {
 	uncompleteFn func(ctx context.Context, userID, lessonID string) (bool, error)
 	snapshotFn   func(ctx context.Context, userID string) (progress.Snapshot, error)
 	dailyFn      func(ctx context.Context, userID string) ([]progress.DayActivity, error)
+	countFn      func(ctx context.Context, userID string) (int64, error)
+}
+
+func (f *fakeRepo) CompletedCount(ctx context.Context, userID string) (int64, error) {
+	if f.countFn == nil {
+		return 0, nil
+	}
+	return f.countFn(ctx, userID)
 }
 
 func (f *fakeRepo) DailyActivity(ctx context.Context, userID string) ([]progress.DayActivity, error) {
@@ -329,5 +337,142 @@ func TestSnapshotAlwaysReturnsSevenDays(t *testing.T) {
 	}
 	if mid := got.Week[2]; mid.Completed != 1 {
 		t.Errorf("Week[2] = %+v, want ngày 17 có 1 bài", mid)
+	}
+}
+
+/* ---------- lịch sử dài ngày ---------- */
+
+// historyFor gọi History với lịch sử và "hôm nay" cố định.
+func historyFor(t *testing.T, today string, days map[string]int64, total int64, span int64) progress.History {
+	t.Helper()
+
+	repo := &fakeRepo{
+		dailyFn: activityOn(t, days),
+		countFn: func(context.Context, string) (int64, error) { return total, nil },
+	}
+
+	got, err := progress.NewService(repo, &fakeLessons{}, fixedToday(t, today)).
+		History(context.Background(), userID, span)
+	if err != nil {
+		t.Fatalf("History() returned error: %v", err)
+	}
+	return got
+}
+
+func TestHistoryFillsEveryDayInTheRange(t *testing.T) {
+	t.Parallel()
+
+	got := historyFor(t, "2026-09-22", map[string]int64{
+		"2026-09-22": 2,
+		"2026-09-20": 1,
+	}, 3, 5)
+
+	if len(got.Days) != 5 {
+		t.Fatalf("len(days) = %d, want 5", len(got.Days))
+	}
+	// Cũ trước, mới sau: 18, 19, 20, 21, 22.
+	want := []int64{0, 0, 1, 0, 2}
+	for i, day := range got.Days {
+		if day.Completed != want[i] {
+			t.Errorf("days[%d].Completed = %d, want %d (ngày %s)", i, day.Completed, want[i], day.Day.Format(time.DateOnly))
+		}
+	}
+	if last := got.Days[len(got.Days)-1].Day.Format(time.DateOnly); last != "2026-09-22" {
+		t.Errorf("ngày cuối = %s, want 2026-09-22", last)
+	}
+}
+
+/**
+ * Tổng phải đếm riêng chứ không cộng từ Days: Days bị cắt theo span, còn
+ * ListDailyCompletions thì cắt ở 400 ngày. Cộng từ đó thì người học lâu năm
+ * thấy một con số thiếu mà không biết vì sao.
+ */
+func TestHistoryTotalCoversMoreThanTheRange(t *testing.T) {
+	t.Parallel()
+
+	got := historyFor(t, "2026-09-22", map[string]int64{"2026-09-22": 2}, 500, 7)
+
+	if got.TotalLessons != 500 {
+		t.Errorf("TotalLessons = %d, want 500", got.TotalLessons)
+	}
+	if got.TotalXP != 500*progress.XPPerLesson {
+		t.Errorf("TotalXP = %d, want %d", got.TotalXP, 500*progress.XPPerLesson)
+	}
+}
+
+func TestHistoryCountsActiveDaysInTheRange(t *testing.T) {
+	t.Parallel()
+
+	got := historyFor(t, "2026-09-22", map[string]int64{
+		"2026-09-22": 1,
+		"2026-09-21": 3,
+		// Ngoài phạm vi 3 ngày, không được đếm.
+		"2026-09-10": 5,
+	}, 9, 3)
+
+	if got.ActiveDays != 2 {
+		t.Errorf("ActiveDays = %d, want 2", got.ActiveDays)
+	}
+}
+
+func TestHistoryFindsTheLongestRun(t *testing.T) {
+	t.Parallel()
+
+	got := historyFor(t, "2026-09-22", map[string]int64{
+		"2026-09-22": 1,
+		"2026-09-21": 1,
+		// đứt ở 20
+		"2026-09-19": 1,
+		"2026-09-18": 1,
+		"2026-09-17": 1,
+	}, 5, 10)
+
+	if got.LongestStreak != 3 {
+		t.Errorf("LongestStreak = %d, want 3", got.LongestStreak)
+	}
+	if got.CurrentStreak != 2 {
+		t.Errorf("CurrentStreak = %d, want 2", got.CurrentStreak)
+	}
+}
+
+func TestHistoryHandlesAnEmptyRecord(t *testing.T) {
+	t.Parallel()
+
+	got := historyFor(t, "2026-09-22", map[string]int64{}, 0, 7)
+
+	if len(got.Days) != 7 {
+		t.Errorf("len(days) = %d, want 7: biểu đồ vẫn cần đủ cột", len(got.Days))
+	}
+	if got.LongestStreak != 0 || got.CurrentStreak != 0 || got.ActiveDays != 0 {
+		t.Errorf("chuỗi và ngày học phải bằng 0, got longest=%d current=%d active=%d",
+			got.LongestStreak, got.CurrentStreak, got.ActiveDays)
+	}
+}
+
+// days là tham số hiển thị, không phải dữ liệu người dùng nhập: giá trị vô lý
+// bị kẹp về biên chứ không làm hỏng cả màn hình.
+func TestHistoryClampsTheRange(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		asked int64
+		want  int
+	}{
+		"không truyền": {asked: 0, want: int(progress.DefaultHistoryDays)},
+		"số âm":        {asked: -5, want: int(progress.DefaultHistoryDays)},
+		"quá trần":     {asked: 10_000, want: int(progress.MaxHistoryDays)},
+		"hợp lệ":       {asked: 14, want: 14},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := historyFor(t, "2026-09-22", map[string]int64{}, 0, tc.asked)
+
+			if len(got.Days) != tc.want {
+				t.Errorf("len(days) = %d, want %d", len(got.Days), tc.want)
+			}
+		})
 	}
 }

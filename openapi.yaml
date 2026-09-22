@@ -604,7 +604,12 @@ paths:
     get:
       tags: [vocabulary]
       summary: Danh sách từ vựng của một bài
+      description: |
+        Công cụ soạn nội dung, chỉ admin. Người học đọc từ của mình ở
+        `/me/vocabulary`, nơi hàng đợi được lọc theo bài họ đã học xong.
       operationId: listVocabulary
+      security:
+        - bearerAuth: []
       parameters:
         - name: lesson_id
           in: query
@@ -622,6 +627,10 @@ paths:
                 $ref: '#/components/schemas/VocabularyEntryList'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
     post:
       tags: [vocabulary]

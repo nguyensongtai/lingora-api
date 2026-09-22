@@ -36,18 +36,19 @@ func NewHandler(svc service) *Handler {
 	return &Handler{service: svc, now: time.Now}
 }
 
-// Mount gắn hai nhánh: /vocabulary là nội dung (đọc công khai, ghi cần admin),
-// /me/vocabulary là thứ của riêng người đang đăng nhập.
+// Mount gắn hai nhánh: /vocabulary là công cụ soạn nội dung (toàn bộ cần
+// admin), /me/vocabulary là thứ của riêng người đang đăng nhập.
 func (h *Handler) Mount(r chi.Router, adminOnly, authenticated func(http.Handler) http.Handler) {
+	// Cả nhánh /vocabulary là công cụ soạn nội dung. Người học không đọc ở đây
+	// mà ở /me/vocabulary, nơi hàng đợi được lọc theo bài họ đã học xong —
+	// mở /vocabulary cho người ngoài là phát không toàn bộ từ và nghĩa, và vô
+	// hiệu hoá luôn quy tắc mở khoá đó.
 	r.Route("/vocabulary", func(r chi.Router) {
+		r.Use(adminOnly)
 		r.Get("/", h.listByLesson)
-
-		r.Group(func(r chi.Router) {
-			r.Use(adminOnly)
-			r.Post("/", h.create)
-			r.Patch("/{entryId}", h.update)
-			r.Delete("/{entryId}", h.delete)
-		})
+		r.Post("/", h.create)
+		r.Patch("/{entryId}", h.update)
+		r.Delete("/{entryId}", h.delete)
 	})
 
 	r.Route("/me/vocabulary", func(r chi.Router) {

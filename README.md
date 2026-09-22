@@ -195,6 +195,13 @@ thuộc bài người dùng chưa học xong.
 | `GET` | `/healthz` | tiến trình còn sống (không chạm database) |
 | `GET` | `/readyz` | ping database; hỏng → 503 `degraded` |
 
+Mỗi request hoàn tất để lại đúng một dòng log JSON kèm `request_id`, `status`
+và `took_ms`. Mức log theo status — 5xx là `ERROR`, 4xx là `WARN` (một tràng
+401 là dấu hiệu dò mật khẩu), còn lại `INFO`. `/healthz` và `/readyz` không
+được ghi: chúng bị gọi vài giây một lần và sẽ nhấn chìm mọi thứ khác. Query
+string cũng không được ghi — nó do client đặt, còn log thì thường được chuyển
+sang nơi khác lưu.
+
 ## Xác thực
 
 Access token là **JWT HS256**, sống 15 phút, gửi qua `Authorization: Bearer`.

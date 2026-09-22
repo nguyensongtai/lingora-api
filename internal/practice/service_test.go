@@ -1,0 +1,375 @@
+package practice_test
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/nguyensongtai/lingora-api/internal/practice"
+	"github.com/nguyensongtai/lingora-api/internal/vocabulary"
+)
+
+const userID = "01929f00-0000-7000-8000-00000000bbbb"
+
+// noShuffle giữ nguyên thứ tự để nội dung câu hỏi kiểm được. Xáo trộn thật đã
+// có test riêng ở dưới.
+func noShuffle(int, func(i, j int)) {}
+
+type fakeWords struct {
+	cards []vocabulary.Card
+	err   error
+
+	// graded ghi lại những lần Service chấm điểm sang SM-2.
+	graded []struct {
+		entryID string
+		grade   vocabulary.Grade
+	}
+}
+
+func (f *fakeWords) List(context.Context, string, *vocabulary.State) ([]vocabulary.Card, error) {
+	return f.cards, f.err
+}
+
+func (f *fakeWords) Review(_ context.Context, _, entryID string, grade vocabulary.Grade) (vocabulary.Review, error) {
+	f.graded = append(f.graded, struct {
+		entryID string
+		grade   vocabulary.Grade
+	}{entryID, grade})
+	return vocabulary.Review{}, nil
+}
+
+func card(id, word, meaning, example string) vocabulary.Card {
+	return vocabulary.Card{
+		Entry: vocabulary.Entry{
+			ID:      id,
+			Word:    word,
+			Meaning: meaning,
+			Example: example,
+		},
+		Level: "A1",
+	}
+}
+
+// pool là vốn từ đủ để dựng trắc nghiệm; chỉ từ đầu có câu ví dụ dùng được.
+func pool() []vocabulary.Card {
+	return []vocabulary.Card{
+		card("id-1", "reluctant", "miễn cưỡng", "She was reluctant to admit her mistake."),
+		card("id-2", "commute", "đi lại (đi làm)", ""),
+		card("id-3", "deadline", "hạn chót", ""),
+		card("id-4", "thorough", "kỹ lưỡng", ""),
+		card("id-5", "spare", "rảnh rỗi", ""),
+	}
+}
+
+func newService(words *fakeWords) *practice.Service {
+	return practice.NewService(words,
+		practice.WithShuffle(noShuffle),
+		practice.WithClock(func() time.Time { return time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC) }),
+	)
+}
+
+func sessionOf(t *testing.T, words *fakeWords, size int) []practice.Question {
+	t.Helper()
+
+	questions, err := newService(words).Session(context.Background(), userID, size)
+	if err != nil {
+		t.Fatalf("Session() returned error: %v", err)
+	}
+	return questions
+}
+
+/* ---------- dựng phiên ---------- */
+
+func TestSessionBlanksTheWordInItsExample(t *testing.T) {
+	t.Parallel()
+
+	questions := sessionOf(t, &fakeWords{cards: pool()}, 5)
+
+	first := questions[0]
+	if first.Kind != practice.KindFillBlank {
+		t.Fatalf("kind = %q, want fill_blank khi từ có câu ví dụ", first.Kind)
+	}
+	if first.Prompt != "She was "+practice.Blank+" to admit her mistake." {
+		t.Errorf("prompt = %q, chỗ trống đặt sai", first.Prompt)
+	}
+	if first.Hint != "miễn cưỡng" {
+		t.Errorf("hint = %q, want nghĩa tiếng Việt", first.Hint)
+	}
+	if len(first.Options) != 0 {
+		t.Errorf("options = %v, want rỗng: dạng này gõ tay", first.Options)
+	}
+}
+
+// "art" không được khoét mất chữ trong "start": khoét nửa từ ra một câu vô lý.
+func TestSessionIgnoresAnExampleThatOnlyContainsTheWordInside(t *testing.T) {
+	t.Parallel()
+
+	words := &fakeWords{cards: []vocabulary.Card{
+		card("id-1", "art", "nghệ thuật", "We will start tomorrow."),
+		card("id-2", "commute", "đi lại", ""),
+		card("id-3", "deadline", "hạn chót", ""),
+	}}
+
+	questions := sessionOf(t, words, 1)
+
+	if questions[0].Kind == practice.KindFillBlank {
+		t.Errorf("kind = fill_blank, nhưng câu ví dụ không chứa nguyên từ %q", "art")
+	}
+}
+
+func TestSessionOffersMeaningsForMultipleChoice(t *testing.T) {
+	t.Parallel()
+
+	// Bỏ từ có ví dụ đi để câu đầu tiên là trắc nghiệm.
+	words := &fakeWords{cards: pool()[1:]}
+
+	questions := sessionOf(t, words, 1)
+
+	first := questions[0]
+	if first.Kind != practice.KindMultipleChoice {
+		t.Fatalf("kind = %q, want multiple_choice", first.Kind)
+	}
+	if first.Prompt != "commute" {
+		t.Errorf("prompt = %q, want chính từ đó", first.Prompt)
+	}
+	if !contains(first.Options, "đi lại (đi làm)") {
+		t.Errorf("options = %v, thiếu đáp án đúng", first.Options)
+	}
+	if len(first.Options) != practice.MaxOptions {
+		t.Errorf("len(options) = %d, want %d", len(first.Options), practice.MaxOptions)
+	}
+}
+
+// Đáp án nhiễu phải lấy từ chính vốn từ của người học: chúng trông hợp lý, và
+// không vô tình dạy sai một từ họ chưa gặp.
+func TestSessionDrawsDistractorsFromTheLearnersOwnWords(t *testing.T) {
+	t.Parallel()
+
+	words := &fakeWords{cards: pool()[1:]}
+	meanings := map[string]bool{}
+	for _, c := range words.cards {
+		meanings[c.Meaning] = true
+	}
+
+	questions := sessionOf(t, words, 1)
+
+	for _, option := range questions[0].Options {
+		if !meanings[option] {
+			t.Errorf("option %q không nằm trong vốn từ của người học", option)
+		}
+	}
+}
+
+func TestSessionNeverRepeatsAnOption(t *testing.T) {
+	t.Parallel()
+
+	// Hai từ khác nhau nhưng trùng nghĩa: chỉ một được xuất hiện.
+	words := &fakeWords{cards: []vocabulary.Card{
+		card("id-1", "commute", "đi lại", ""),
+		card("id-2", "travel", "đi lại", ""),
+		card("id-3", "deadline", "hạn chót", ""),
+		card("id-4", "spare", "rảnh rỗi", ""),
+	}}
+
+	questions := sessionOf(t, words, 1)
+
+	seen := map[string]bool{}
+	for _, option := range questions[0].Options {
+		if seen[option] {
+			t.Errorf("option %q xuất hiện hai lần trong %v", option, questions[0].Options)
+		}
+		seen[option] = true
+	}
+}
+
+// Chưa đủ từ là trạng thái bình thường của màn hình, không phải sự cố.
+func TestSessionIsEmptyWhenThereAreTooFewWords(t *testing.T) {
+	t.Parallel()
+
+	words := &fakeWords{cards: pool()[:practice.MinOptions-1]}
+
+	questions := sessionOf(t, words, 10)
+
+	if len(questions) != 0 {
+		t.Errorf("len(questions) = %d, want 0", len(questions))
+	}
+}
+
+func TestSessionClampsItsSize(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct{ asked, want int }{
+		"không truyền":   {asked: 0, want: 5},
+		"số âm":          {asked: -3, want: 5},
+		"quá trần":       {asked: 999, want: 5},
+		"nhỏ hơn vốn từ": {asked: 2, want: 2},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			// Vốn từ chỉ có 5, nên mọi yêu cầu lớn hơn đều dừng ở 5.
+			questions := sessionOf(t, &fakeWords{cards: pool()}, tc.asked)
+
+			if len(questions) != tc.want {
+				t.Errorf("len(questions) = %d, want %d", len(questions), tc.want)
+			}
+		})
+	}
+}
+
+// Từ đến hạn nên được hỏi trước: luyện tập là để cứu những từ sắp quên.
+func TestSessionAsksDueWordsFirst(t *testing.T) {
+	t.Parallel()
+
+	mastered := card("id-mastered", "spare", "rảnh rỗi", "")
+	mastered.Review = &vocabulary.Review{
+		IntervalDays: vocabulary.MasteredIntervalDays + 5,
+		DueOn:        time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC),
+	}
+	due := card("id-due", "deadline", "hạn chót", "")
+
+	words := &fakeWords{cards: []vocabulary.Card{
+		mastered,
+		due,
+		card("id-3", "commute", "đi lại", ""),
+	}}
+
+	questions := sessionOf(t, words, 3)
+
+	if questions[len(questions)-1].EntryID != "id-mastered" {
+		t.Errorf("từ đã thành thạo phải nằm cuối, thứ tự nhận được: %v", idsOf(questions))
+	}
+}
+
+/* ---------- chấm bài ---------- */
+
+func checkAnswer(t *testing.T, words *fakeWords, entryID string, kind practice.Kind, answer string) practice.Result {
+	t.Helper()
+
+	result, err := newService(words).Check(context.Background(), userID, entryID, kind, answer)
+	if err != nil {
+		t.Fatalf("Check() returned error: %v", err)
+	}
+	return result
+}
+
+func TestCheckAcceptsTheRightAnswer(t *testing.T) {
+	t.Parallel()
+
+	words := &fakeWords{cards: pool()}
+
+	result := checkAnswer(t, words, "id-1", practice.KindFillBlank, "reluctant")
+
+	if !result.Correct {
+		t.Error("Correct = false, want true")
+	}
+	if result.Expected != "reluctant" {
+		t.Errorf("Expected = %q, want reluctant", result.Expected)
+	}
+	// Đây là quyết định trung tâm: đúng thì KHÔNG đụng vào lịch ôn.
+	if len(words.graded) != 0 {
+		t.Errorf("trả lời đúng đã chạm SM-2: %v", words.graded)
+	}
+	if result.Penalised {
+		t.Error("Penalised = true cho câu đúng")
+	}
+}
+
+// Gõ thừa dấu cách hay viết hoa không phải là nhớ sai từ.
+func TestCheckIgnoresCaseAndSpacing(t *testing.T) {
+	t.Parallel()
+
+	for _, answer := range []string{"Reluctant", "  reluctant  ", "RELUCTANT"} {
+		t.Run(answer, func(t *testing.T) {
+			t.Parallel()
+
+			words := &fakeWords{cards: pool()}
+
+			if !checkAnswer(t, words, "id-1", practice.KindFillBlank, answer).Correct {
+				t.Errorf("%q bị chấm sai", answer)
+			}
+		})
+	}
+}
+
+func TestCheckPushesAWrongWordBackIntoTheQueue(t *testing.T) {
+	t.Parallel()
+
+	words := &fakeWords{cards: pool()}
+
+	result := checkAnswer(t, words, "id-1", practice.KindFillBlank, "reluctent")
+
+	if result.Correct {
+		t.Error("Correct = true cho câu sai")
+	}
+	if !result.Penalised {
+		t.Error("Penalised = false: câu sai phải đẩy từ về đầu hàng đợi")
+	}
+	if len(words.graded) != 1 {
+		t.Fatalf("số lần chấm SM-2 = %d, want 1", len(words.graded))
+	}
+	if words.graded[0].entryID != "id-1" || words.graded[0].grade != vocabulary.GradeForgot {
+		t.Errorf("chấm %v, want id-1 với GradeForgot", words.graded[0])
+	}
+}
+
+func TestCheckComparesAgainstTheMeaningForMultipleChoice(t *testing.T) {
+	t.Parallel()
+
+	words := &fakeWords{cards: pool()}
+
+	if !checkAnswer(t, words, "id-1", practice.KindMultipleChoice, "miễn cưỡng").Correct {
+		t.Error("chọn đúng nghĩa lại bị chấm sai")
+	}
+	// Dạng trắc nghiệm hỏi nghĩa, nên gõ lại chính từ đó là sai.
+	if checkAnswer(t, &fakeWords{cards: pool()}, "id-1", practice.KindMultipleChoice, "reluctant").Correct {
+		t.Error("đáp án là từ tiếng Anh lại được chấp nhận ở dạng hỏi nghĩa")
+	}
+}
+
+// Từ chưa mở khoá không có trong danh sách, nên nó không phân biệt được với từ
+// không tồn tại — cố ý, vì nói "có từ này nhưng bạn chưa được học" là tiết lộ
+// nội dung bài chưa học.
+func TestCheckHidesWordsTheLearnerHasNotUnlocked(t *testing.T) {
+	t.Parallel()
+
+	_, err := newService(&fakeWords{cards: pool()}).
+		Check(context.Background(), userID, "id-khong-co", practice.KindFillBlank, "gì đó")
+
+	if !errors.Is(err, practice.ErrNotFound) {
+		t.Fatalf("error = %v, want it to match ErrNotFound", err)
+	}
+}
+
+func TestCheckRejectsAnUnknownKind(t *testing.T) {
+	t.Parallel()
+
+	_, err := newService(&fakeWords{cards: pool()}).
+		Check(context.Background(), userID, "id-1", practice.Kind("nghe-roi-doan"), "reluctant")
+
+	if !errors.Is(err, practice.ErrInvalidKind) {
+		t.Fatalf("error = %v, want it to match ErrInvalidKind", err)
+	}
+}
+
+/* ---------- tiện ích ---------- */
+
+func contains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func idsOf(questions []practice.Question) []string {
+	ids := make([]string, 0, len(questions))
+	for _, question := range questions {
+		ids = append(ids, question.EntryID)
+	}
+	return ids
+}

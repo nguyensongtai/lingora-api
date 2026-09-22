@@ -22,6 +22,7 @@ import (
 	"github.com/nguyensongtai/lingora-api/internal/course"
 	"github.com/nguyensongtai/lingora-api/internal/httpx"
 	"github.com/nguyensongtai/lingora-api/internal/platform/postgres"
+	"github.com/nguyensongtai/lingora-api/internal/practice"
 	"github.com/nguyensongtai/lingora-api/internal/progress"
 	"github.com/redis/go-redis/v9"
 
@@ -98,7 +99,11 @@ func run() error {
 	courseHandler := course.NewHandler(course.NewService(courseRepo))
 	// progress hỏi course xem bài còn sống hay không, nên dùng chung đúng repo đó.
 	progressHandler := progress.NewHandler(progress.NewService(progress.NewRepo(pool), courseRepo))
-	vocabularyHandler := vocabulary.NewHandler(vocabulary.NewService(vocabulary.NewRepo(pool), courseRepo))
+	vocabularyService := vocabulary.NewService(vocabulary.NewRepo(pool), courseRepo)
+	vocabularyHandler := vocabulary.NewHandler(vocabularyService)
+	// Luyện tập dựng câu hỏi từ chính vốn từ đã mở khoá, nên nó dùng lại đúng
+	// service từ vựng thay vì hỏi database lần nữa bằng quy tắc chép lại.
+	practiceHandler := practice.NewHandler(practice.NewService(vocabularyService))
 
 	router := chi.NewRouter()
 	router.Use(
@@ -139,6 +144,7 @@ func run() error {
 		courseHandler.Mount(r, verifier.RequireRole(auth.RoleAdmin), verifier.OptionalAuth())
 		progressHandler.Mount(r, verifier.RequireAuthenticated())
 		vocabularyHandler.Mount(r, verifier.RequireRole(auth.RoleAdmin), verifier.RequireAuthenticated())
+		practiceHandler.Mount(r, verifier.RequireAuthenticated())
 	})
 
 	srv := &http.Server{

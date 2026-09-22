@@ -94,6 +94,27 @@ func (e ErrorCode) Valid() bool {
 	}
 }
 
+// Defines values for PracticeKind.
+const (
+	FillBlank      PracticeKind = "fill_blank"
+	ListenChoose   PracticeKind = "listen_choose"
+	MultipleChoice PracticeKind = "multiple_choice"
+)
+
+// Valid indicates whether the value is a known member of the PracticeKind enum.
+func (e PracticeKind) Valid() bool {
+	switch e {
+	case FillBlank:
+		return true
+	case ListenChoose:
+		return true
+	case MultipleChoice:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UserRole.
 const (
 	Admin   UserRole = "admin"
@@ -302,6 +323,61 @@ type LessonUpdate struct {
 type LoginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+}
+
+// PracticeAnswer defines model for PracticeAnswer.
+type PracticeAnswer struct {
+	// Answer Lựa chọn đã chọn, hoặc chuỗi đã gõ. So sánh bỏ qua hoa/thường và khoảng trắng thừa.
+	Answer  string       `json:"answer"`
+	EntryId string       `json:"entry_id"`
+	Kind    PracticeKind `json:"kind"`
+}
+
+// PracticeKind defines model for PracticeKind.
+type PracticeKind string
+
+// PracticeQuestion defines model for PracticeQuestion.
+type PracticeQuestion struct {
+	EntryId string `json:"entry_id"`
+
+	// Hint Gợi ý thêm; hiện chỉ `fill_blank` dùng, để hiện nghĩa tiếng Việt.
+	Hint string       `json:"hint"`
+	Kind PracticeKind `json:"kind"`
+
+	// Level Trình độ theo khung CEFR.
+	Level CourseLevel `json:"level"`
+
+	// Options Rỗng với `fill_blank` vì dạng đó gõ tay.
+	Options []string `json:"options"`
+
+	// Prompt Câu dẫn. `multiple_choice`: chính từ đó. `fill_blank`: câu ví dụ đã
+	// khoét chỗ trống. `listen_choose`: chuỗi rỗng, câu dẫn là âm thanh.
+	Prompt string `json:"prompt"`
+
+	// Word Từ tiếng Anh. Với `listen_choose`, phía trước cần nó để máy đọc lên
+	// — nghĩa là đáp án nằm sẵn trong trang. Đó là hệ quả không tránh
+	// được khi phát âm bằng `speechSynthesis` thay vì file audio.
+	Word string `json:"word"`
+}
+
+// PracticeResult defines model for PracticeResult.
+type PracticeResult struct {
+	Correct bool `json:"correct"`
+
+	// Expected Đáp án đúng, trả về cả khi làm đúng để người học đối chiếu.
+	Expected string `json:"expected"`
+
+	// Penalised Câu sai đẩy từ về đầu hàng đợi ôn. Trả lời ĐÚNG không kéo dài
+	// khoảng cách ôn — luyện dồn một buổi không được biến một từ vừa gặp
+	// thành "thành thạo".
+	Penalised bool `json:"penalised"`
+}
+
+// PracticeSession Câu hỏi sinh tại chỗ từ vốn từ người học đã mở khoá — không có bảng câu
+// hỏi nào để soạn. Chưa đủ từ thì `questions` rỗng; đó là trạng thái bình
+// thường của màn hình, không phải lỗi.
+type PracticeSession struct {
+	Questions []PracticeQuestion `json:"questions"`
 }
 
 // ProgressHistory Bức tranh dài hạn, dùng cho màn Tiến độ. `ProgressSnapshot` trả lời
@@ -529,6 +605,12 @@ type ListCoursesParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// GetPracticeSessionParams defines parameters for GetPracticeSession.
+type GetPracticeSessionParams struct {
+	// Size Số câu muốn có, mặc định 10, trần 30. Ngoài khoảng thì kẹp về biên.
+	Size *int `form:"size,omitempty" json:"size,omitempty"`
+}
+
 // GetProgressHistoryParams defines parameters for GetProgressHistory.
 type GetProgressHistoryParams struct {
 	// Days Số ngày muốn xem, mặc định 30, trần 365. Giá trị ngoài khoảng bị
@@ -579,6 +661,9 @@ type ReorderLessonsJSONRequestBody = LessonOrder
 
 // UpdateLessonJSONRequestBody defines body for UpdateLesson for application/json ContentType.
 type UpdateLessonJSONRequestBody = LessonUpdate
+
+// CheckPracticeAnswerJSONRequestBody defines body for CheckPracticeAnswer for application/json ContentType.
+type CheckPracticeAnswerJSONRequestBody = PracticeAnswer
 
 // ReviewVocabularyEntryJSONRequestBody defines body for ReviewVocabularyEntry for application/json ContentType.
 type ReviewVocabularyEntryJSONRequestBody = VocabularyReviewRequest

@@ -20,6 +20,12 @@ tags:
     description: Đăng nhập, làm mới phiên và đăng xuất
   - name: courses
     description: Khoá học và bài học thuộc khoá
+  - name: progress
+    description: Tiến độ học, XP và chuỗi ngày liên tiếp
+  - name: vocabulary
+    description: Từ vựng của bài và lịch ôn SM-2 của người học
+  - name: practice
+    description: Phiên luyện tập sinh từ vốn từ đã mở khoá
 
 paths:
   /auth/login:
@@ -553,6 +559,57 @@ paths:
                 $ref: '#/components/schemas/ProgressSnapshot'
         '401':
           $ref: '#/components/responses/Unauthorized'
+
+  /me/practice/session:
+    get:
+      tags: [practice]
+      summary: Dựng một phiên luyện tập
+      operationId: getPracticeSession
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: size
+          in: query
+          required: false
+          description: Số câu muốn có, mặc định 10, trần 30. Ngoài khoảng thì kẹp về biên.
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Phiên luyện tập
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PracticeSession'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /me/practice/answers:
+    post:
+      tags: [practice]
+      summary: Chấm một câu trả lời
+      operationId: checkPracticeAnswer
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PracticeAnswer'
+      responses:
+        '200':
+          description: Kết quả chấm
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PracticeResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /me/progress/history:
     get:
@@ -1394,6 +1451,85 @@ components:
         completed_lessons:
           type: integer
           format: int64
+
+    PracticeKind:
+      type: string
+      enum: [multiple_choice, fill_blank, listen_choose]
+
+    PracticeQuestion:
+      type: object
+      required: [entry_id, kind, level, word, prompt, hint, options]
+      properties:
+        entry_id:
+          type: string
+          format: uuid
+          x-go-type: string
+        kind:
+          $ref: '#/components/schemas/PracticeKind'
+        level:
+          $ref: '#/components/schemas/CourseLevel'
+        word:
+          type: string
+          description: |
+            Từ tiếng Anh. Với `listen_choose`, phía trước cần nó để máy đọc lên
+            — nghĩa là đáp án nằm sẵn trong trang. Đó là hệ quả không tránh
+            được khi phát âm bằng `speechSynthesis` thay vì file audio.
+        prompt:
+          type: string
+          description: |
+            Câu dẫn. `multiple_choice`: chính từ đó. `fill_blank`: câu ví dụ đã
+            khoét chỗ trống. `listen_choose`: chuỗi rỗng, câu dẫn là âm thanh.
+        hint:
+          type: string
+          description: Gợi ý thêm; hiện chỉ `fill_blank` dùng, để hiện nghĩa tiếng Việt.
+        options:
+          type: array
+          description: Rỗng với `fill_blank` vì dạng đó gõ tay.
+          items:
+            type: string
+
+    PracticeSession:
+      type: object
+      required: [questions]
+      description: |
+        Câu hỏi sinh tại chỗ từ vốn từ người học đã mở khoá — không có bảng câu
+        hỏi nào để soạn. Chưa đủ từ thì `questions` rỗng; đó là trạng thái bình
+        thường của màn hình, không phải lỗi.
+      properties:
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PracticeQuestion'
+
+    PracticeAnswer:
+      type: object
+      required: [entry_id, kind, answer]
+      properties:
+        entry_id:
+          type: string
+          format: uuid
+          x-go-type: string
+        kind:
+          $ref: '#/components/schemas/PracticeKind'
+        answer:
+          type: string
+          description: Lựa chọn đã chọn, hoặc chuỗi đã gõ. So sánh bỏ qua hoa/thường và khoảng trắng thừa.
+
+    PracticeResult:
+      type: object
+      required: [correct, expected, penalised]
+      properties:
+        correct:
+          type: boolean
+        expected:
+          type: string
+          description: Đáp án đúng, trả về cả khi làm đúng để người học đối chiếu.
+        penalised:
+          type: boolean
+          description: |
+            Câu sai đẩy từ về đầu hàng đợi ôn. Trả lời ĐÚNG không kéo dài
+            khoảng cách ôn — luyện dồn một buổi không được biến một từ vừa gặp
+            thành "thành thạo".
 
     ProgressHistory:
       type: object

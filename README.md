@@ -45,6 +45,17 @@ make createuser email=admin@lingora.vn role=admin
 `make seed` nạp giáo trình mẫu phủ đủ sáu bậc CEFR — đủ khoá, bài và từ vựng để
 mọi màn hình có gì hiển thị. Chạy lại được nhiều lần, không nhân đôi dữ liệu.
 
+**Bậc CEFR của từng từ lấy từ dữ liệu công bố, không phải phán đoán**, và kiểm
+lại được bằng một lệnh:
+
+```bash
+make verify-vocab
+```
+
+Lệnh này tải hai danh sách nguồn rồi đối chiếu với database, báo mọi từ đặt sai
+bậc. Không có nó thì khẳng định "từ này là B1" chỉ là lời nói suông — không ai
+nhìn bằng mắt mà kiểm được 288 từ.
+
 Muốn xem màn Tiến độ và Luyện tập ở trạng thái đã có lịch sử thì tạo thêm một
 tài khoản demo rồi nạp tiến độ mẫu cho nó — 24 bài trải trên 30 ngày:
 
@@ -417,6 +428,26 @@ nên test nào cố tình vi phạm ràng buộc phải bọc thao tác đó tro
 
 CI dựng sẵn service `postgres:18-alpine` và `redis:8-alpine`, nên integration
 test chạy thật trên CI chứ không âm thầm bị bỏ qua.
+
+## Nguồn dữ liệu từ vựng
+
+Bậc CEFR trong `db/seed/004_vocabulary.sql` lấy từ hai bộ dữ liệu mở. Cả hai
+đều **bắt buộc trích dẫn**:
+
+| Bậc | Nguồn | Giấy phép |
+| --- | --- | --- |
+| A1–B2 | The CEFR-J Wordlist Version 1.5, Yukio Tono, Tokyo University of Foreign Studies | dùng được cho nghiên cứu và thương mại, kèm trích dẫn |
+| C1–C2 | Octanove Vocabulary Profile C1/C2 version 1.0, Octanove Labs | CC BY-SA 4.0 |
+
+Cả hai phân phối qua [openlanguageprofiles/olp-en-cefrj](https://github.com/openlanguageprofiles/olp-en-cefrj).
+
+**Octanove là CC BY-SA**, nên phần C1/C2 của danh sách từ ở đây là tác phẩm
+phái sinh và phải giữ cùng giấy phép. Nếu sau này cần một giáo trình thương mại
+đóng, phần C1/C2 phải thay bằng nguồn khác — phần A1–B2 thì không vướng.
+
+**Chỉ BẬC là có nguồn.** Phiên âm, nghĩa tiếng Việt và câu ví dụ do Claude soạn
+và **chưa được người có chuyên môn rà soát**. Trước khi có người học thật, phần
+đó cần một vòng biên tập.
 
 ## Công cụ
 

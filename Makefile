@@ -45,6 +45,11 @@ migrate-create: ## Create a migration pair: make migrate-create name=add_foo
 seed: ## Nạp dữ liệu mẫu cho môi trường dev (cần docker compose up -d)
 	docker compose exec -T postgres psql -U lingora -d lingora -v ON_ERROR_STOP=1 < db/seed/001_sample_courses.sql
 	docker compose exec -T postgres psql -U lingora -d lingora -v ON_ERROR_STOP=1 < db/seed/002_curriculum.sql
+	docker compose exec -T postgres psql -U lingora -d lingora -v ON_ERROR_STOP=1 < db/seed/004_vocabulary.sql
+
+.PHONY: verify-vocab
+verify-vocab: ## Đối chiếu bậc CEFR của từ vựng với dữ liệu nguồn (cần mạng)
+	python3 db/seed/verify-levels.py
 
 .PHONY: seed-demo
 seed-demo: ## Nạp tiến độ mẫu cho demo@lingora.vn (tạo tài khoản đó trước)

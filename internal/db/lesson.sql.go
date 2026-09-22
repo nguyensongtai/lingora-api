@@ -25,7 +25,7 @@ VALUES (
         0
     )
 )
-RETURNING id, course_id, slug, title, position, created_at, updated_at, deleted_at
+RETURNING id, course_id, slug, title, position, created_at, updated_at, deleted_at, summary
 `
 
 type CreateLessonParams struct {
@@ -47,12 +47,13 @@ func (q *Queries) CreateLesson(ctx context.Context, arg CreateLessonParams) (Les
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Summary,
 	)
 	return i, err
 }
 
 const getLessonByID = `-- name: GetLessonByID :one
-SELECT id, course_id, slug, title, position, created_at, updated_at, deleted_at FROM lessons
+SELECT id, course_id, slug, title, position, created_at, updated_at, deleted_at, summary FROM lessons
 WHERE id = $1 AND deleted_at IS NULL
 `
 
@@ -68,8 +69,46 @@ func (q *Queries) GetLessonByID(ctx context.Context, id pgtype.UUID) (Lesson, er
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Summary,
 	)
 	return i, err
+}
+
+const listLessonBlocks = `-- name: ListLessonBlocks :many
+SELECT id, lesson_id, kind, body, text_en, text_vi, speaker, position, created_at, updated_at FROM lesson_blocks
+WHERE lesson_id = $1
+ORDER BY position ASC, id ASC
+`
+
+func (q *Queries) ListLessonBlocks(ctx context.Context, lessonID pgtype.UUID) ([]LessonBlock, error) {
+	rows, err := q.db.Query(ctx, listLessonBlocks, lessonID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LessonBlock{}
+	for rows.Next() {
+		var i LessonBlock
+		if err := rows.Scan(
+			&i.ID,
+			&i.LessonID,
+			&i.Kind,
+			&i.Body,
+			&i.TextEn,
+			&i.TextVi,
+			&i.Speaker,
+			&i.Position,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listLessonIDsByCourse = `-- name: ListLessonIDsByCourse :many
@@ -99,7 +138,7 @@ func (q *Queries) ListLessonIDsByCourse(ctx context.Context, courseID pgtype.UUI
 }
 
 const listLessonsByCourse = `-- name: ListLessonsByCourse :many
-SELECT id, course_id, slug, title, position, created_at, updated_at, deleted_at FROM lessons
+SELECT id, course_id, slug, title, position, created_at, updated_at, deleted_at, summary FROM lessons
 WHERE course_id = $1 AND deleted_at IS NULL
 ORDER BY position ASC, id ASC
 `
@@ -122,6 +161,7 @@ func (q *Queries) ListLessonsByCourse(ctx context.Context, courseID pgtype.UUID)
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.Summary,
 		); err != nil {
 			return nil, err
 		}
@@ -160,6 +200,46 @@ func (q *Queries) ReorderLessons(ctx context.Context, arg ReorderLessonsParams) 
 	return result.RowsAffected(), nil
 }
 
+const replaceLessonBlocks = `-- name: ReplaceLessonBlocks :execrows
+WITH cleared AS (
+    DELETE FROM lesson_blocks WHERE lesson_id = $1
+)
+INSERT INTO lesson_blocks (lesson_id, kind, body, text_en, text_vi, speaker, position)
+SELECT
+    $1,
+    (t.block->>'kind')::lesson_block_kind,
+    coalesce(t.block->>'body', ''),
+    coalesce(t.block->>'text_en', ''),
+    coalesce(t.block->>'text_vi', ''),
+    coalesce(t.block->>'speaker', ''),
+    (t.ordinality - 1)::integer
+FROM jsonb_array_elements($2::jsonb) WITH ORDINALITY AS t(block, ordinality)
+`
+
+type ReplaceLessonBlocksParams struct {
+	LessonID pgtype.UUID
+	Blocks   []byte
+}
+
+// Thay toàn bộ nội dung của một bài trong MỘT câu lệnh.
+//
+// DELETE nằm trong CTE nên nó chạy tới cùng dù phần INSERT không sinh dòng nào
+// — gửi danh sách rỗng là xoá sạch nội dung bài, đúng như mong đợi. Gộp hai
+// thao tác vào một câu để không có khoảnh khắc nào bài bị trống giữa chừng.
+//
+// Tham số là jsonb chứ không phải năm mảng song song: unnest nhiều mảng thì
+// sqlc không phân tích được, còn năm mảng rời thì lệch độ dài là ghi sai mà
+// không ai biết.
+//
+// position lấy từ ORDINALITY nên luôn liền mạch từ 0, bất kể client gửi gì.
+func (q *Queries) ReplaceLessonBlocks(ctx context.Context, arg ReplaceLessonBlocksParams) (int64, error) {
+	result, err := q.db.Exec(ctx, replaceLessonBlocks, arg.LessonID, arg.Blocks)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const softDeleteLesson = `-- name: SoftDeleteLesson :execrows
 UPDATE lessons
 SET deleted_at = now(), updated_at = now()
@@ -179,20 +259,27 @@ UPDATE lessons
 SET
     slug       = COALESCE($1, slug),
     title      = COALESCE($2, title),
+    summary    = COALESCE($3, summary),
     updated_at = now()
-WHERE id = $3 AND deleted_at IS NULL
-RETURNING id, course_id, slug, title, position, created_at, updated_at, deleted_at
+WHERE id = $4 AND deleted_at IS NULL
+RETURNING id, course_id, slug, title, position, created_at, updated_at, deleted_at, summary
 `
 
 type UpdateLessonParams struct {
-	Slug  *string
-	Title *string
-	ID    pgtype.UUID
+	Slug    *string
+	Title   *string
+	Summary *string
+	ID      pgtype.UUID
 }
 
 // position cố ý không nằm ở đây: đổi thứ tự là việc của ReorderLessons.
 func (q *Queries) UpdateLesson(ctx context.Context, arg UpdateLessonParams) (Lesson, error) {
-	row := q.db.QueryRow(ctx, updateLesson, arg.Slug, arg.Title, arg.ID)
+	row := q.db.QueryRow(ctx, updateLesson,
+		arg.Slug,
+		arg.Title,
+		arg.Summary,
+		arg.ID,
+	)
 	var i Lesson
 	err := row.Scan(
 		&i.ID,
@@ -203,6 +290,7 @@ func (q *Queries) UpdateLesson(ctx context.Context, arg UpdateLessonParams) (Les
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Summary,
 	)
 	return i, err
 }

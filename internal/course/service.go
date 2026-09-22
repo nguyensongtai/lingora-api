@@ -14,7 +14,13 @@ const (
 	maxSlugLen        = 120
 	maxTitleLen       = 200
 	maxDescriptionLen = 5000
-	maxCoverURLLen    = 2048
+	maxSummaryLen     = 1000
+	// maxBlockTextLen áp cho cả đoạn giải thích lẫn câu mẫu.
+	maxBlockTextLen = 4000
+	maxSpeakerLen   = 60
+	// maxBlocksPerLesson chặn một request khổng lồ làm nghẽn database.
+	maxBlocksPerLesson = 200
+	maxCoverURLLen     = 2048
 
 	// DefaultPageSize được dùng khi client không truyền page size.
 	DefaultPageSize int32 = 20
@@ -44,6 +50,8 @@ type repository interface {
 	SoftDeleteLesson(ctx context.Context, lessonID string) error
 	ListLessonIDs(ctx context.Context, courseID string) ([]string, error)
 	ReorderLessons(ctx context.Context, courseID string, lessonIDs []string) (int64, error)
+	ListBlocks(ctx context.Context, lessonID string) ([]Block, error)
+	ReplaceBlocks(ctx context.Context, lessonID string, blocks []Block) error
 }
 
 // Service giữ nghiệp vụ khoá học: chuẩn hoá đầu vào, validate, phân trang.

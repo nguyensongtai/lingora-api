@@ -100,6 +100,49 @@ func (ns NullCourseStatus) Value() (driver.Value, error) {
 	return string(ns.CourseStatus), nil
 }
 
+type LessonBlockKind string
+
+const (
+	LessonBlockKindNote     LessonBlockKind = "note"
+	LessonBlockKindExample  LessonBlockKind = "example"
+	LessonBlockKindDialogue LessonBlockKind = "dialogue"
+)
+
+func (e *LessonBlockKind) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = LessonBlockKind(s)
+	case string:
+		*e = LessonBlockKind(s)
+	default:
+		return fmt.Errorf("unsupported scan type for LessonBlockKind: %T", src)
+	}
+	return nil
+}
+
+type NullLessonBlockKind struct {
+	LessonBlockKind LessonBlockKind
+	Valid           bool // Valid is true if LessonBlockKind is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullLessonBlockKind) Scan(value interface{}) error {
+	if value == nil {
+		ns.LessonBlockKind, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.LessonBlockKind.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullLessonBlockKind) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.LessonBlockKind), nil
+}
+
 type UserRole string
 
 const (
@@ -165,6 +208,20 @@ type Lesson struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DeletedAt *time.Time
+	Summary   string
+}
+
+type LessonBlock struct {
+	ID        pgtype.UUID
+	LessonID  pgtype.UUID
+	Kind      LessonBlockKind
+	Body      string
+	TextEn    string
+	TextVi    string
+	Speaker   string
+	Position  int32
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type LessonProgress struct {

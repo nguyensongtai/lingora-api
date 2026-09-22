@@ -35,6 +35,7 @@ UPDATE lessons
 SET
     slug       = COALESCE(sqlc.narg('slug'), slug),
     title      = COALESCE(sqlc.narg('title'), title),
+    summary    = COALESCE(sqlc.narg('summary'), summary),
     updated_at = now()
 WHERE id = sqlc.arg('id') AND deleted_at IS NULL
 RETURNING *;
@@ -56,3 +57,34 @@ FROM (
 WHERE l.id = new_order.id
   AND l.course_id = sqlc.arg('course_id')
   AND l.deleted_at IS NULL;
+
+-- name: ListLessonBlocks :many
+SELECT * FROM lesson_blocks
+WHERE lesson_id = sqlc.arg('lesson_id')
+ORDER BY position ASC, id ASC;
+
+-- name: ReplaceLessonBlocks :execrows
+-- Thay toàn bộ nội dung của một bài trong MỘT câu lệnh.
+--
+-- DELETE nằm trong CTE nên nó chạy tới cùng dù phần INSERT không sinh dòng nào
+-- — gửi danh sách rỗng là xoá sạch nội dung bài, đúng như mong đợi. Gộp hai
+-- thao tác vào một câu để không có khoảnh khắc nào bài bị trống giữa chừng.
+--
+-- Tham số là jsonb chứ không phải năm mảng song song: unnest nhiều mảng thì
+-- sqlc không phân tích được, còn năm mảng rời thì lệch độ dài là ghi sai mà
+-- không ai biết.
+--
+-- position lấy từ ORDINALITY nên luôn liền mạch từ 0, bất kể client gửi gì.
+WITH cleared AS (
+    DELETE FROM lesson_blocks WHERE lesson_id = sqlc.arg('lesson_id')
+)
+INSERT INTO lesson_blocks (lesson_id, kind, body, text_en, text_vi, speaker, position)
+SELECT
+    sqlc.arg('lesson_id'),
+    (t.block->>'kind')::lesson_block_kind,
+    coalesce(t.block->>'body', ''),
+    coalesce(t.block->>'text_en', ''),
+    coalesce(t.block->>'text_vi', ''),
+    coalesce(t.block->>'speaker', ''),
+    (t.ordinality - 1)::integer
+FROM jsonb_array_elements(sqlc.arg('blocks')::jsonb) WITH ORDINALITY AS t(block, ordinality);

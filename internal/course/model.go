@@ -75,13 +75,54 @@ type Course struct {
 
 // Lesson là bài học thuộc một khoá, sắp xếp theo Position tăng dần.
 type Lesson struct {
-	ID        string
-	CourseID  string
-	Slug      string
-	Title     string
+	ID       string
+	CourseID string
+	Slug     string
+	Title    string
+	// Summary là một đoạn dẫn ngắn, hiện ngay dưới tiêu đề bài.
+	Summary   string
 	Position  int32
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+// BlockKind là dạng của một khối nội dung trong bài.
+type BlockKind string
+
+const (
+	// BlockNote là đoạn giải thích bằng tiếng Việt.
+	BlockNote BlockKind = "note"
+	// BlockExample là một câu mẫu tiếng Anh kèm bản dịch.
+	BlockExample BlockKind = "example"
+	// BlockDialogue giống BlockExample nhưng có tên người nói.
+	BlockDialogue BlockKind = "dialogue"
+)
+
+// Valid cho biết giá trị có nằm trong enum lesson_block_kind hay không.
+func (k BlockKind) Valid() bool {
+	switch k {
+	case BlockNote, BlockExample, BlockDialogue:
+		return true
+	default:
+		return false
+	}
+}
+
+// Block là một khối nội dung của bài học. Mỗi dạng chỉ dùng một phần các
+// trường dưới đây; database có ràng buộc bắt đúng phần đó phải có.
+type Block struct {
+	ID      string
+	Kind    BlockKind
+	Body    string
+	TextEN  string
+	TextVI  string
+	Speaker string
+}
+
+// LessonDetail là bài học kèm nội dung, dùng cho màn học bài.
+type LessonDetail struct {
+	Lesson
+	Blocks []Block
 }
 
 // CreateParams là dữ liệu đã hợp lệ để tạo khoá học.
@@ -135,6 +176,7 @@ type LessonCreateParams struct {
 
 // LessonUpdateParams là partial update; nil nghĩa là giữ nguyên.
 type LessonUpdateParams struct {
-	Slug  *string
-	Title *string
+	Slug    *string
+	Title   *string
+	Summary *string
 }

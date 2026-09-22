@@ -2,6 +2,7 @@ package course
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -58,9 +59,10 @@ func (r *Repo) UpdateLesson(ctx context.Context, lessonID string, params LessonU
 	}
 
 	row, err := r.q.UpdateLesson(ctx, db.UpdateLessonParams{
-		ID:    id,
-		Slug:  params.Slug,
-		Title: params.Title,
+		ID:      id,
+		Slug:    params.Slug,
+		Title:   params.Title,
+		Summary: params.Summary,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -155,4 +157,62 @@ func (r *Repo) LessonExists(ctx context.Context, lessonID string) (bool, error) 
 		return false, err
 	}
 	return true, nil
+}
+
+// ListBlocks đọc nội dung của một bài theo đúng thứ tự hiển thị.
+func (r *Repo) ListBlocks(ctx context.Context, lessonID string) ([]Block, error) {
+	id, err := parseLessonID(lessonID)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := r.q.ListLessonBlocks(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("list blocks of lesson %s: %w", lessonID, err)
+	}
+
+	blocks := make([]Block, 0, len(rows))
+	for _, row := range rows {
+		blocks = append(blocks, Block{
+			ID:      postgres.UUIDString(row.ID),
+			Kind:    BlockKind(row.Kind),
+			Body:    row.Body,
+			TextEN:  row.TextEn,
+			TextVI:  row.TextVi,
+			Speaker: row.Speaker,
+		})
+	}
+	return blocks, nil
+}
+
+// ReplaceBlocks thay toàn bộ nội dung của một bài. Danh sách rỗng là xoá sạch.
+func (r *Repo) ReplaceBlocks(ctx context.Context, lessonID string, blocks []Block) error {
+	id, err := parseLessonID(lessonID)
+	if err != nil {
+		return err
+	}
+
+	// Query nhận jsonb; khoá ở đây phải khớp tên cột mà câu lệnh đọc ra.
+	payload := make([]map[string]string, 0, len(blocks))
+	for _, block := range blocks {
+		payload = append(payload, map[string]string{
+			"kind":    string(block.Kind),
+			"body":    block.Body,
+			"text_en": block.TextEN,
+			"text_vi": block.TextVI,
+			"speaker": block.Speaker,
+		})
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("encode blocks of lesson %s: %w", lessonID, err)
+	}
+
+	if _, err := r.q.ReplaceLessonBlocks(ctx, db.ReplaceLessonBlocksParams{
+		LessonID: id,
+		Blocks:   encoded,
+	}); err != nil {
+		return fmt.Errorf("replace blocks of lesson %s: %w", lessonID, err)
+	}
+	return nil
 }

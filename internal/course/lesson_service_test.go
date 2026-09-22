@@ -177,3 +177,123 @@ func TestReorderLessonsRequiresTheCourse(t *testing.T) {
 		t.Fatalf("error = %v, want it to match ErrNotFound", err)
 	}
 }
+
+/* ---------- nội dung bài học ---------- */
+
+func blockService(t *testing.T, repo *fakeRepo) *course.Service {
+	t.Helper()
+
+	if repo.getLessonFn == nil {
+		repo.getLessonFn = func(context.Context, string) (course.Lesson, error) {
+			return course.Lesson{ID: "lesson-1"}, nil
+		}
+	}
+	return course.NewService(repo)
+}
+
+func replace(t *testing.T, blocks []course.Block) error {
+	t.Helper()
+
+	return blockService(t, &fakeRepo{t: t}).
+		ReplaceBlocks(context.Background(), "lesson-1", blocks)
+}
+
+/**
+ * Mỗi dạng khối chỉ dùng phần trường của nó. Database có ràng buộc bắt đúng
+ * hình dạng này; service kiểm lại để lỗi ra 400 kèm tên field thay vì 500 kèm
+ * một câu SQLSTATE.
+ */
+func TestReplaceBlocksRejectsTheWrongShape(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]course.Block{
+		"note rỗng body":       {Kind: course.BlockNote},
+		"note lẫn text_en":     {Kind: course.BlockNote, Body: "giải thích", TextEN: "Hello."},
+		"example rỗng text_en": {Kind: course.BlockExample, TextVI: "Xin chào."},
+		"example lẫn speaker":  {Kind: course.BlockExample, TextEN: "Hello.", Speaker: "An"},
+		"dialogue thiếu người": {Kind: course.BlockDialogue, TextEN: "Hello."},
+		"dialogue lẫn body":    {Kind: course.BlockDialogue, TextEN: "Hello.", Speaker: "An", Body: "x"},
+		"dạng không có thật":   {Kind: course.BlockKind("bai-hat")},
+	}
+
+	for name, block := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			err := replace(t, []course.Block{block})
+
+			if !errors.Is(err, course.ErrValidation) {
+				t.Fatalf("error = %v, want it to match ErrValidation", err)
+			}
+		})
+	}
+}
+
+func TestReplaceBlocksAcceptsEachKind(t *testing.T) {
+	t.Parallel()
+
+	blocks := []course.Block{
+		{Kind: course.BlockNote, Body: "Thì hiện tại đơn dùng cho thói quen."},
+		{Kind: course.BlockExample, TextEN: "I walk to school.", TextVI: "Tôi đi bộ đến trường."},
+		{Kind: course.BlockDialogue, Speaker: "An", TextEN: "Where do you live?", TextVI: "Bạn sống ở đâu?"},
+	}
+
+	if err := replace(t, blocks); err != nil {
+		t.Fatalf("ReplaceBlocks() returned error: %v", err)
+	}
+}
+
+// Gửi mảng rỗng là cách duy nhất để xoá sạch nội dung bài, nên nó phải đi được
+// tới repo chứ không bị chặn như dữ liệu thiếu.
+func TestReplaceBlocksAcceptsAnEmptyListAsClearing(t *testing.T) {
+	t.Parallel()
+
+	repo := &fakeRepo{t: t}
+
+	if err := blockService(t, repo).ReplaceBlocks(context.Background(), "lesson-1", nil); err != nil {
+		t.Fatalf("ReplaceBlocks() returned error: %v", err)
+	}
+	if repo.replacedFor != "lesson-1" {
+		t.Errorf("repo nhận lesson %q, want lesson-1", repo.replacedFor)
+	}
+	if len(repo.replacedBlocks) != 0 {
+		t.Errorf("repo nhận %d khối, want 0", len(repo.replacedBlocks))
+	}
+}
+
+func TestReplaceBlocksTrimsEveryField(t *testing.T) {
+	t.Parallel()
+
+	repo := &fakeRepo{t: t}
+	blocks := []course.Block{
+		{Kind: course.BlockDialogue, Speaker: "  An  ", TextEN: "  Hello.  ", TextVI: "  Xin chào.  "},
+	}
+
+	if err := blockService(t, repo).ReplaceBlocks(context.Background(), "lesson-1", blocks); err != nil {
+		t.Fatalf("ReplaceBlocks() returned error: %v", err)
+	}
+
+	got := repo.replacedBlocks[0]
+	if got.Speaker != "An" || got.TextEN != "Hello." || got.TextVI != "Xin chào." {
+		t.Errorf("khối chưa được cắt khoảng trắng: %+v", got)
+	}
+}
+
+// Ghi vào một bài không tồn tại phải là 404, không phải âm thầm thành công với
+// 0 dòng.
+func TestReplaceBlocksRequiresAnExistingLesson(t *testing.T) {
+	t.Parallel()
+
+	repo := &fakeRepo{t: t, getLessonFn: func(context.Context, string) (course.Lesson, error) {
+		return course.Lesson{}, course.ErrLessonNotFound
+	}}
+
+	err := course.NewService(repo).ReplaceBlocks(context.Background(), "khong-co", nil)
+
+	if !errors.Is(err, course.ErrLessonNotFound) {
+		t.Fatalf("error = %v, want it to match ErrLessonNotFound", err)
+	}
+	if repo.replacedFor != "" {
+		t.Error("repo bị gọi dù bài không tồn tại")
+	}
+}

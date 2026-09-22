@@ -31,6 +31,12 @@ type fakeRepo struct {
 	listLessonIDsFn    func(context.Context, string) ([]string, error)
 	reorderLessonsFn   func(context.Context, string, []string) (int64, error)
 
+	listBlocksFn    func(context.Context, string) ([]course.Block, error)
+	replaceBlocksFn func(context.Context, string, []course.Block) error
+	// replacedBlocks giữ lần ghi gần nhất để test xem service chuẩn hoá ra sao.
+	replacedBlocks []course.Block
+	replacedFor    string
+
 	listIDsByLevelFn   func(context.Context, course.Level) ([]string, error)
 	reorderCoursesFn   func(context.Context, course.Level, []string) (int64, error)
 	reorderCoursesArgs []string
@@ -652,6 +658,22 @@ func TestReorderCoursesRequiresTheWholeLevel(t *testing.T) {
 			t.Fatalf("error = %v, want *ValidationError", err)
 		}
 	})
+}
+
+func (f *fakeRepo) ListBlocks(ctx context.Context, lessonID string) ([]course.Block, error) {
+	if f.listBlocksFn == nil {
+		return nil, nil
+	}
+	return f.listBlocksFn(ctx, lessonID)
+}
+
+func (f *fakeRepo) ReplaceBlocks(ctx context.Context, lessonID string, blocks []course.Block) error {
+	f.replacedBlocks = blocks
+	f.replacedFor = lessonID
+	if f.replaceBlocksFn == nil {
+		return nil
+	}
+	return f.replaceBlocksFn(ctx, lessonID, blocks)
 }
 
 // adminViewer là người đọc thấy mọi thứ. Những test có từ trước quy tắc ẩn bản

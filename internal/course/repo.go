@@ -268,6 +268,7 @@ func toLesson(row db.Lesson) Lesson {
 		CourseID:  postgres.UUIDString(row.CourseID),
 		Slug:      row.Slug,
 		Title:     row.Title,
+		Summary:   row.Summary,
 		Position:  row.Position,
 		CreatedAt: row.CreatedAt,
 		UpdatedAt: row.UpdatedAt,

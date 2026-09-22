@@ -160,12 +160,36 @@ nên không có trạng thái trung gian trùng position.
 | Method | Route | Quyền |
 | --- | --- | --- |
 | `GET` | `/me/progress` | user |
+| `GET` | `/me/progress/history` | user |
 | `PUT` | `/me/progress/lessons/{lessonId}` | user |
 | `DELETE` | `/me/progress/lessons/{lessonId}` | user |
 
 `GET /me/progress` trả XP hôm nay, mục tiêu, `xp_per_lesson`, streak, hoạt động
-7 ngày, tiến độ từng khoá và khoá học gần nhất. `PUT` là idempotent
+7 ngày, tiến độ từng khoá và khoá học gần nhất. `GET /me/progress/history` trả
+dải dài ngày (mặc định 30, trần 365) kèm tổng của cả đời — `longest_streak` là
+dài nhất **trong phạm vi được hỏi**, không phải kỷ lục mọi thời. `PUT` là idempotent
 (`ON CONFLICT DO NOTHING`) — bấm hai lần không cộng XP hai lần.
+
+### Luyện tập
+
+| Method | Route | Quyền |
+| --- | --- | --- |
+| `GET` | `/me/practice/session` | user |
+| `POST` | `/me/practice/answers` | user |
+
+Câu hỏi **sinh tại chỗ** từ `vocabulary_entries`, không có bảng câu hỏi nào để
+soạn. `internal/practice` vì thế không có repo riêng: nó đi qua
+`vocabulary.Service`, nên quy tắc "chỉ ôn từ của bài đã học xong" tự có hiệu
+lực mà không phải chép lại, và từ chưa mở khoá đơn giản là không có trong danh
+sách nên không cần một lần kiểm quyền thứ hai.
+
+Chấm điểm **chỉ phạt khi sai**: câu sai đẩy từ về đầu hàng đợi ôn, câu đúng
+không kéo dài khoảng cách. SM-2 dựa trên việc nhớ được sau một quãng nghỉ, nên
+luyện dồn một buổi không được biến một từ vừa gặp thành "thành thạo".
+
+`listen_choose` phải gửi cả chữ của từ xuống để trình duyệt đọc lên, nghĩa là
+đáp án nằm sẵn trong trang — hệ quả không tránh được khi dùng `speechSynthesis`
+thay vì file audio.
 
 ### Từ vựng
 
@@ -292,6 +316,7 @@ internal/
 ├── db/            # code sqlc sinh ra — không sửa tay
 ├── httpx/         # JSON, CORS, middleware hạn mức
 ├── platform/      # pgx pool, helper uuid
+├── practice/      # phiên luyện tập, không có bảng riêng
 ├── progress/      # tiến độ, XP, streak
 ├── ratelimit/     # interface Limiter + bản memory và redis
 ├── testdb/        # helper integration test

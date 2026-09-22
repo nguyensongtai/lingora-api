@@ -81,23 +81,93 @@ func sessionOf(t *testing.T, words *fakeWords, size int) []practice.Question {
 
 /* ---------- dựng phiên ---------- */
 
+// Câu thứ hai trong vòng luân phiên là dạng điền từ.
 func TestSessionBlanksTheWordInItsExample(t *testing.T) {
 	t.Parallel()
 
-	questions := sessionOf(t, &fakeWords{cards: pool()}, 5)
+	// "reluctant" là từ duy nhất trong pool có câu ví dụ; đặt nó ở vị trí thứ
+	// hai, đúng lượt của dạng điền từ.
+	cards := []vocabulary.Card{pool()[1], pool()[0], pool()[2], pool()[3]}
+	questions := sessionOf(t, &fakeWords{cards: cards}, 4)
 
-	first := questions[0]
-	if first.Kind != practice.KindFillBlank {
-		t.Fatalf("kind = %q, want fill_blank khi từ có câu ví dụ", first.Kind)
+	second := questions[1]
+	if second.Kind != practice.KindFillBlank {
+		t.Fatalf("kind = %q, want fill_blank ở vị trí thứ hai", second.Kind)
 	}
-	if first.Prompt != "She was "+practice.Blank+" to admit her mistake." {
-		t.Errorf("prompt = %q, chỗ trống đặt sai", first.Prompt)
+	if second.Prompt != "She was "+practice.Blank+" to admit her mistake." {
+		t.Errorf("prompt = %q, chỗ trống đặt sai", second.Prompt)
 	}
-	if first.Hint != "miễn cưỡng" {
-		t.Errorf("hint = %q, want nghĩa tiếng Việt", first.Hint)
+	if second.Hint != "miễn cưỡng" {
+		t.Errorf("hint = %q, want nghĩa tiếng Việt", second.Hint)
 	}
-	if len(first.Options) != 0 {
-		t.Errorf("options = %v, want rỗng: dạng này gõ tay", first.Options)
+	if len(second.Options) != 0 {
+		t.Errorf("options = %v, want rỗng: dạng này gõ tay", second.Options)
+	}
+}
+
+/**
+ * Một phiên phải có cả ba dạng chứ không toàn một kiểu.
+ *
+ * Bản đầu tiên chọn dạng theo dữ liệu của từng từ — hễ câu ví dụ dùng được thì
+ * ra fill_blank. Với giáo trình đầy đủ, nơi từ nào cũng có ví dụ tốt, cả mười
+ * câu đều thành gõ tay. Test này khoá lại chuyện đó.
+ */
+func TestSessionRotatesThroughEveryKind(t *testing.T) {
+	t.Parallel()
+
+	// Vốn từ mà MỌI từ đều có câu ví dụ dùng được — đúng hình dạng dữ liệu
+	// thật, và là đúng trường hợp bản cũ hỏng.
+	cards := []vocabulary.Card{
+		card("id-1", "reluctant", "miễn cưỡng", "She was reluctant to admit it."),
+		card("id-2", "commute", "đi lại", "I commute by bus."),
+		card("id-3", "deadline", "hạn chót", "We missed the deadline."),
+		card("id-4", "thorough", "kỹ lưỡng", "He is thorough in his work."),
+		card("id-5", "spare", "rảnh rỗi", "I read in my spare time."),
+		card("id-6", "fresh", "tươi", "We buy fresh fish."),
+	}
+
+	questions := sessionOf(t, &fakeWords{cards: cards}, 6)
+
+	seen := map[practice.Kind]int{}
+	for _, question := range questions {
+		seen[question.Kind]++
+	}
+
+	for _, kind := range []practice.Kind{
+		practice.KindMultipleChoice,
+		practice.KindFillBlank,
+		practice.KindListenChoose,
+	} {
+		if seen[kind] == 0 {
+			t.Errorf("không có câu nào dạng %q; phân bố nhận được: %v", kind, seen)
+		}
+	}
+}
+
+// Từ không có câu ví dụ dùng được vẫn phải ra một câu hỏi, chỉ là dạng khác.
+func TestSessionFallsBackWhenAKindDoesNotFit(t *testing.T) {
+	t.Parallel()
+
+	// Không từ nào có câu ví dụ, nên lượt của fill_blank phải lùi về trắc nghiệm.
+	cards := []vocabulary.Card{
+		card("id-1", "commute", "đi lại", ""),
+		card("id-2", "deadline", "hạn chót", ""),
+		card("id-3", "thorough", "kỹ lưỡng", ""),
+		card("id-4", "spare", "rảnh rỗi", ""),
+	}
+
+	questions := sessionOf(t, &fakeWords{cards: cards}, 4)
+
+	if len(questions) != 4 {
+		t.Fatalf("len(questions) = %d, want 4", len(questions))
+	}
+	for i, question := range questions {
+		if question.Kind == practice.KindFillBlank {
+			t.Errorf("câu %d ra fill_blank dù từ không có câu ví dụ", i)
+		}
+		if question.Kind == practice.KindMultipleChoice && len(question.Options) == 0 {
+			t.Errorf("câu %d là trắc nghiệm nhưng không có lựa chọn nào", i)
+		}
 	}
 }
 
@@ -105,15 +175,16 @@ func TestSessionBlanksTheWordInItsExample(t *testing.T) {
 func TestSessionIgnoresAnExampleThatOnlyContainsTheWordInside(t *testing.T) {
 	t.Parallel()
 
+	// "art" đặt ở vị trí thứ hai, tức lượt của dạng điền từ.
 	words := &fakeWords{cards: []vocabulary.Card{
-		card("id-1", "art", "nghệ thuật", "We will start tomorrow."),
-		card("id-2", "commute", "đi lại", ""),
+		card("id-1", "commute", "đi lại", ""),
+		card("id-2", "art", "nghệ thuật", "We will start tomorrow."),
 		card("id-3", "deadline", "hạn chót", ""),
 	}}
 
-	questions := sessionOf(t, words, 1)
+	questions := sessionOf(t, words, 2)
 
-	if questions[0].Kind == practice.KindFillBlank {
+	if questions[1].Kind == practice.KindFillBlank {
 		t.Errorf("kind = fill_blank, nhưng câu ví dụ không chứa nguyên từ %q", "art")
 	}
 }
@@ -121,7 +192,7 @@ func TestSessionIgnoresAnExampleThatOnlyContainsTheWordInside(t *testing.T) {
 func TestSessionOffersMeaningsForMultipleChoice(t *testing.T) {
 	t.Parallel()
 
-	// Bỏ từ có ví dụ đi để câu đầu tiên là trắc nghiệm.
+	// rotation bắt đầu bằng trắc nghiệm, nên câu đầu luôn là dạng đó.
 	words := &fakeWords{cards: pool()[1:]}
 
 	questions := sessionOf(t, words, 1)

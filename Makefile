@@ -44,6 +44,11 @@ migrate-create: ## Create a migration pair: make migrate-create name=add_foo
 .PHONY: seed
 seed: ## Nạp dữ liệu mẫu cho môi trường dev (cần docker compose up -d)
 	docker compose exec -T postgres psql -U lingora -d lingora -v ON_ERROR_STOP=1 < db/seed/001_sample_courses.sql
+	docker compose exec -T postgres psql -U lingora -d lingora -v ON_ERROR_STOP=1 < db/seed/002_curriculum.sql
+
+.PHONY: seed-demo
+seed-demo: ## Nạp tiến độ mẫu cho demo@lingora.vn (tạo tài khoản đó trước)
+	docker compose exec -T postgres psql -U lingora -d lingora -v ON_ERROR_STOP=1 < db/seed/003_demo_progress.sql
 
 .PHONY: createuser
 createuser: ## Tạo tài khoản: make createuser email=... role=admin

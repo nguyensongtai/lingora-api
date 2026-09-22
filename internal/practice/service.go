@@ -102,34 +102,44 @@ func (s *Service) prioritise(cards []vocabulary.Card) []vocabulary.Card {
 	return ordered
 }
 
-// buildQuestion chọn dạng hỏi hợp với dữ liệu sẵn có của từ. index dùng để
-// luân phiên giữa hai dạng trắc nghiệm, để một phiên không toàn một kiểu.
+// rotation là thứ tự luân phiên các dạng câu hỏi trong một phiên.
+//
+// Luân phiên theo vị trí chứ không chọn theo dữ liệu của từng từ. Bản đầu tiên
+// làm ngược lại — hễ câu ví dụ dùng được thì ra fill_blank — và với giáo trình
+// đầy đủ, nơi từ nào cũng có ví dụ tốt, cả mười câu đều thành gõ tay. Dữ liệu
+// mỏng lúc đó che mất chuyện này.
+var rotation = [...]Kind{KindMultipleChoice, KindFillBlank, KindListenChoose}
+
+// buildQuestion dựng câu hỏi theo dạng tới lượt, và lùi về trắc nghiệm khi dữ
+// liệu của từ không đủ cho dạng đó.
 func (s *Service) buildQuestion(card vocabulary.Card, pool []vocabulary.Card, index int) Question {
 	question := Question{
 		EntryID: card.ID,
-		Kind:    KindMultipleChoice,
 		Level:   card.Level,
 		Word:    card.Word,
-		Prompt:  card.Word,
-		Options: s.options(card.Meaning, pool, func(c vocabulary.Card) string { return c.Meaning }),
 	}
 
-	// Điền chỗ trống chỉ dựng được khi câu ví dụ thật sự chứa từ đó — người
-	// soạn có thể viết ví dụ ở dạng chia khác, và khoét nhầm thì câu hỏi vô lý.
-	if blanked, ok := blankOut(card.Example, card.Word); ok {
-		question.Kind = KindFillBlank
-		question.Prompt = blanked
-		question.Hint = card.Meaning
-		question.Options = nil
+	switch rotation[index%len(rotation)] {
+	case KindFillBlank:
+		// Điền chỗ trống chỉ dựng được khi câu ví dụ thật sự chứa nguyên từ đó
+		// — người soạn có thể viết ví dụ ở dạng chia khác, và khoét nhầm thì
+		// câu hỏi vô lý.
+		if blanked, ok := blankOut(card.Example, card.Word); ok {
+			question.Kind = KindFillBlank
+			question.Prompt = blanked
+			question.Hint = card.Meaning
+			return question
+		}
+
+	case KindListenChoose:
+		question.Kind = KindListenChoose
+		question.Options = s.options(card.Word, pool, func(c vocabulary.Card) string { return c.Word })
 		return question
 	}
 
-	// Không có ví dụ dùng được thì cứ hai câu lại chuyển sang nghe — chọn.
-	if index%2 == 1 {
-		question.Kind = KindListenChoose
-		question.Prompt = ""
-		question.Options = s.options(card.Word, pool, func(c vocabulary.Card) string { return c.Word })
-	}
+	question.Kind = KindMultipleChoice
+	question.Prompt = card.Word
+	question.Options = s.options(card.Meaning, pool, func(c vocabulary.Card) string { return c.Meaning })
 	return question
 }
 

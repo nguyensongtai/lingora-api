@@ -109,6 +109,16 @@ func run() error {
 		httpx.CORS(cfg.CORSAllowedOrigins),
 	)
 
+	// Handler mặc định của chi trả text thuần, nên hai trường hợp này là chỗ
+	// duy nhất trong API không nói cùng một thứ tiếng với phần còn lại. Client
+	// nào cũng parse JSON sẽ vấp đúng ở đây.
+	router.NotFound(func(w http.ResponseWriter, _ *http.Request) {
+		httpx.Error(w, http.StatusNotFound, httpx.CodeNotFound, "Không tìm thấy đường dẫn này.", nil)
+	})
+	router.MethodNotAllowed(func(w http.ResponseWriter, _ *http.Request) {
+		httpx.Error(w, http.StatusMethodNotAllowed, httpx.CodeMethodNotAllowed, "Phương thức không được hỗ trợ cho đường dẫn này.", nil)
+	})
+
 	router.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})

@@ -50,6 +50,8 @@ func TestEveryErrorCodeIsInTheSpecEnum(t *testing.T) {
 		httpx.CodeConflict,
 		httpx.CodeUnauthorized,
 		httpx.CodeForbidden,
+		httpx.CodeMethodNotAllowed,
+		httpx.CodeRateLimited,
 		httpx.CodeInternal,
 	}
 

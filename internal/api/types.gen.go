@@ -57,14 +57,15 @@ func (e CourseStatus) Valid() bool {
 
 // Defines values for ErrorCode.
 const (
-	ErrorCodeConflict        ErrorCode = "conflict"
-	ErrorCodeForbidden       ErrorCode = "forbidden"
-	ErrorCodeInternalError   ErrorCode = "internal_error"
-	ErrorCodeMalformedBody   ErrorCode = "malformed_body"
-	ErrorCodeNotFound        ErrorCode = "not_found"
-	ErrorCodeRateLimited     ErrorCode = "rate_limited"
-	ErrorCodeUnauthorized    ErrorCode = "unauthorized"
-	ErrorCodeValidationError ErrorCode = "validation_error"
+	ErrorCodeConflict         ErrorCode = "conflict"
+	ErrorCodeForbidden        ErrorCode = "forbidden"
+	ErrorCodeInternalError    ErrorCode = "internal_error"
+	ErrorCodeMalformedBody    ErrorCode = "malformed_body"
+	ErrorCodeMethodNotAllowed ErrorCode = "method_not_allowed"
+	ErrorCodeNotFound         ErrorCode = "not_found"
+	ErrorCodeRateLimited      ErrorCode = "rate_limited"
+	ErrorCodeUnauthorized     ErrorCode = "unauthorized"
+	ErrorCodeValidationError  ErrorCode = "validation_error"
 )
 
 // Valid indicates whether the value is a known member of the ErrorCode enum.
@@ -77,6 +78,8 @@ func (e ErrorCode) Valid() bool {
 	case ErrorCodeInternalError:
 		return true
 	case ErrorCodeMalformedBody:
+		return true
+	case ErrorCodeMethodNotAllowed:
 		return true
 	case ErrorCodeNotFound:
 		return true

@@ -20,14 +20,15 @@ var ErrMalformedBody = errors.New("httpx: malformed request body")
 
 // Mã lỗi dùng chung cho toàn bộ API.
 const (
-	CodeValidation   = "validation_error"
-	CodeMalformed    = "malformed_body"
-	CodeNotFound     = "not_found"
-	CodeConflict     = "conflict"
-	CodeUnauthorized = "unauthorized"
-	CodeForbidden    = "forbidden"
-	CodeRateLimited  = "rate_limited"
-	CodeInternal     = "internal_error"
+	CodeValidation       = "validation_error"
+	CodeMalformed        = "malformed_body"
+	CodeNotFound         = "not_found"
+	CodeConflict         = "conflict"
+	CodeUnauthorized     = "unauthorized"
+	CodeForbidden        = "forbidden"
+	CodeRateLimited      = "rate_limited"
+	CodeMethodNotAllowed = "method_not_allowed"
+	CodeInternal         = "internal_error"
 )
 
 // ErrorResponse là body lỗi thống nhất của toàn bộ API.

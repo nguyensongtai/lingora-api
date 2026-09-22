@@ -1326,6 +1326,7 @@ components:
             - unauthorized
             - forbidden
             - not_found
+            - method_not_allowed
             - conflict
             - rate_limited
             - internal_error

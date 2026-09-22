@@ -92,6 +92,9 @@ Bậc CEFR (cột level)  →  Course  →  Lesson  →  VocabularyEntry
 - **Lịch ôn theo SM-2**: khoảng cách 1 → 6 → `round(trước × ease)` ngày, ease sàn
   1.3. Quên một từ thì `repetitions` về 0 nhưng **ease giữ nguyên** — một lần
   lỡ không nên phạt vĩnh viễn độ khó của từ. "Thành thạo" = khoảng cách ≥ 21 ngày.
+- **`draft` là chặn theo người gọi, không phải bộ lọc**: khoá chưa xuất bản chỉ
+  admin đọc được, kể cả qua id, qua slug, qua danh sách bài, hay đọc thẳng một
+  bài. Người khác nhận 404 chứ không phải 403 — 403 đã xác nhận bản ghi tồn tại.
 - **Xoá là xoá mềm** (`deleted_at`). Unique index đều là partial
   `WHERE deleted_at IS NULL`, nên slug của bản ghi đã xoá được dùng lại.
 
@@ -117,11 +120,11 @@ token có role `admin`.
 
 | Method | Route | Quyền |
 | --- | --- | --- |
-| `GET` | `/courses` | — |
-| `GET` | `/courses/{courseId}` | — |
-| `GET` | `/courses/by-slug/{slug}` | — |
-| `GET` | `/courses/{courseId}/lessons` | — |
-| `GET` | `/lessons/{lessonId}` | — |
+| `GET` | `/courses` | — ¹ |
+| `GET` | `/courses/{courseId}` | — ¹ |
+| `GET` | `/courses/by-slug/{slug}` | — ¹ |
+| `GET` | `/courses/{courseId}/lessons` | — ¹ |
+| `GET` | `/lessons/{lessonId}` | — ¹ |
 | `POST` | `/courses` | admin |
 | `PATCH` | `/courses/{courseId}` | admin |
 | `DELETE` | `/courses/{courseId}` | admin |
@@ -131,8 +134,14 @@ token có role `admin`.
 | `PATCH` | `/lessons/{lessonId}` | admin |
 | `DELETE` | `/lessons/{lessonId}` | admin |
 
+¹ Năm route đọc này công khai nhưng **nội dung phụ thuộc người gọi**: gửi kèm
+token admin thì thấy cả khoá `draft`, không gửi hoặc gửi token thường thì chỉ
+thấy `published`. Token hỏng hay hết hạn bị coi như không có chứ không thành
+401, nên một tab bỏ quên không biến trang công khai thành lỗi.
+
 `GET /courses` nhận `status`, `level`, `page_size` (mặc định 20, **trần 100** —
-vượt trần thì bị cắt im lặng chứ không lỗi) và `cursor`.
+vượt trần thì bị cắt im lặng chứ không lỗi) và `cursor`. Tham số `status` chỉ có
+tác dụng với admin; người khác xin `draft` sẽ nhận một trang rỗng.
 
 Phân trang là **keyset** trên `(created_at DESC, id DESC)`, không phải offset:
 `cursor` là chuỗi mờ base64url lấy từ `next_cursor` của trang trước, `next_cursor`
@@ -162,13 +171,18 @@ nên không có trạng thái trung gian trùng position.
 
 | Method | Route | Quyền |
 | --- | --- | --- |
-| `GET` | `/vocabulary?lesson_id=…` | — |
+| `GET` | `/vocabulary?lesson_id=…` | admin |
 | `POST` | `/vocabulary` | admin |
 | `PATCH` | `/vocabulary/{entryId}` | admin |
 | `DELETE` | `/vocabulary/{entryId}` | admin |
 | `GET` | `/me/vocabulary` | user |
 | `GET` | `/me/vocabulary/stats` | user |
 | `POST` | `/me/vocabulary/{entryId}/review` | user |
+
+Cả nhánh `/vocabulary` là **công cụ soạn nội dung**, không phải chỗ người học
+đọc. Người học đọc ở `/me/vocabulary`, nơi hàng đợi được lọc theo bài họ đã học
+xong — mở `/vocabulary` cho người ngoài là phát không toàn bộ từ và nghĩa, và
+vô hiệu hoá luôn quy tắc mở khoá đó.
 
 `POST /me/vocabulary/{entryId}/review` nhận `grade` là `remembered` hoặc
 `forgot`, chạy SM-2 và trả về thẻ đã lên lịch lại. Endpoint từ chối những từ
@@ -244,13 +258,14 @@ gắn thông báo vào đúng ô mà không phải đoán từ `message`.
 | `unauthorized` | 401 |
 | `forbidden` | 403 |
 | `not_found` | 404 |
+| `method_not_allowed` | 405 |
 | `conflict` | 409 |
 | `rate_limited` | 429 |
 | `internal_error` | 500 |
 
-> **Ngoại lệ đã biết:** route không tồn tại (404) và method sai (405) hiện dùng
-> handler mặc định của chi, trả text rỗng hoặc `404 page not found` chứ không
-> phải JSON. Client nào cũng parse JSON thì sẽ vấp ở hai trường hợp này.
+Đường dẫn sai và method sai cũng dùng đúng body này: handler mặc định của chi
+trả text thuần, nên chúng được thay bằng `router.NotFound` và
+`router.MethodNotAllowed` riêng.
 
 `internal_error` không bao giờ lộ chi tiết lỗi ra ngoài; chi tiết chỉ nằm trong
 log của server.

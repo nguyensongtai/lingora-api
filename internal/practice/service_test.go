@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nguyensongtai/lingora-api/internal/course"
 	"github.com/nguyensongtai/lingora-api/internal/practice"
 	"github.com/nguyensongtai/lingora-api/internal/vocabulary"
 )
@@ -19,6 +20,11 @@ func noShuffle(int, func(i, j int)) {}
 type fakeWords struct {
 	cards []vocabulary.Card
 	err   error
+
+	// lessonEntries là từ của từng bài, tra theo lesson id. Cố ý tách khỏi
+	// cards: luyện trong bài không được phụ thuộc vào việc đã mở khoá.
+	lessonEntries map[string][]vocabulary.Entry
+	lessonAsked   bool
 
 	// graded ghi lại những lần Service chấm điểm sang SM-2.
 	graded []struct {
@@ -37,6 +43,34 @@ func (f *fakeWords) Review(_ context.Context, _, entryID string, grade vocabular
 		grade   vocabulary.Grade
 	}{entryID, grade})
 	return vocabulary.Review{}, nil
+}
+
+func (f *fakeWords) ListByLesson(_ context.Context, lessonID string) ([]vocabulary.Entry, error) {
+	f.lessonAsked = true
+	return f.lessonEntries[lessonID], nil
+}
+
+// fakeLessons có đúng một bài, "lesson-1", nằm trong khoá B1 mang status cho
+// trước. Nó áp đúng quy tắc của course: khoá nháp thì chỉ admin thấy.
+type fakeLessons struct {
+	status course.Status
+}
+
+func (f fakeLessons) GetLesson(_ context.Context, viewer course.Viewer, lessonID string) (course.Lesson, error) {
+	if lessonID != "lesson-1" {
+		return course.Lesson{}, course.ErrLessonNotFound
+	}
+	if !viewer.CanSee(f.status) {
+		return course.Lesson{}, course.ErrNotFound
+	}
+	return course.Lesson{ID: lessonID, CourseID: "course-1"}, nil
+}
+
+func (f fakeLessons) Get(_ context.Context, viewer course.Viewer, _ string) (course.Course, error) {
+	if !viewer.CanSee(f.status) {
+		return course.Course{}, course.ErrNotFound
+	}
+	return course.Course{ID: "course-1", Level: course.LevelB1, Status: f.status}, nil
 }
 
 func card(id, word, meaning, example string) vocabulary.Card {
@@ -63,7 +97,11 @@ func pool() []vocabulary.Card {
 }
 
 func newService(words *fakeWords) *practice.Service {
-	return practice.NewService(words,
+	return newLessonService(words, course.StatusPublished)
+}
+
+func newLessonService(words *fakeWords, status course.Status) *practice.Service {
+	return practice.NewService(words, fakeLessons{status: status},
 		practice.WithShuffle(noShuffle),
 		practice.WithClock(func() time.Time { return time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC) }),
 	)
@@ -443,4 +481,138 @@ func idsOf(questions []practice.Question) []string {
 		ids = append(ids, question.EntryID)
 	}
 	return ids
+}
+
+/* ---------- luyện tập trong bài ---------- */
+
+// lessonWords là sáu từ của "lesson-1", mỗi từ có câu ví dụ dùng được.
+func lessonWords() map[string][]vocabulary.Entry {
+	entries := []vocabulary.Entry{}
+	for _, c := range []vocabulary.Card{
+		card("l-1", "hello", "xin chào", "Say hello to your new neighbour."),
+		card("l-2", "meet", "gặp", "Nice to meet you."),
+		card("l-3", "name", "tên", "What is your name?"),
+		card("l-4", "spell", "đánh vần", "Could you spell it for me?"),
+		card("l-5", "job", "công việc", "I like my job."),
+		card("l-6", "live", "sống", "Where do you live?"),
+	} {
+		entries = append(entries, c.Entry)
+	}
+	return map[string][]vocabulary.Entry{"lesson-1": entries}
+}
+
+func TestLessonSessionAsksEveryWordOfTheLessonEvenBeforeItIsUnlocked(t *testing.T) {
+	t.Parallel()
+
+	// cards rỗng: người học chưa mở khoá từ nào, vì chưa bấm "Đã xong".
+	words := &fakeWords{lessonEntries: lessonWords()}
+
+	questions, err := newService(words).LessonSession(context.Background(), course.Viewer{}, "lesson-1")
+	if err != nil {
+		t.Fatalf("LessonSession() returned error: %v", err)
+	}
+	if len(questions) != 6 {
+		t.Fatalf("len = %d, want đủ 6 từ của bài", len(questions))
+	}
+
+	kinds := map[practice.Kind]int{}
+	for _, question := range questions {
+		kinds[question.Kind]++
+		if question.Level != string(course.LevelB1) {
+			t.Errorf("Level = %q, want bậc của khoá chứa bài", question.Level)
+		}
+	}
+	// Mọi từ đều có ví dụ tốt — đúng tình huống từng làm cả phiên thành gõ tay.
+	if len(kinds) != 3 {
+		t.Errorf("kinds = %v, want đủ ba dạng", kinds)
+	}
+}
+
+func TestLessonSessionHidesDraftLessonsFromLearners(t *testing.T) {
+	t.Parallel()
+
+	words := &fakeWords{lessonEntries: lessonWords()}
+
+	_, err := newLessonService(words, course.StatusDraft).LessonSession(context.Background(), course.Viewer{}, "lesson-1")
+	if !errors.Is(err, course.ErrNotFound) {
+		t.Fatalf("error = %v, want course.ErrNotFound", err)
+	}
+	if words.lessonAsked {
+		t.Error("đã đọc từ của một bài mà người này không được thấy")
+	}
+
+	// Admin thì thấy, để còn thử bài trước khi xuất bản.
+	if _, err := newLessonService(words, course.StatusDraft).
+		LessonSession(context.Background(), course.Viewer{IsAdmin: true}, "lesson-1"); err != nil {
+		t.Errorf("admin: error = %v, want nil", err)
+	}
+}
+
+func TestLessonSessionIsEmptyWhenTheLessonHasTooFewWords(t *testing.T) {
+	t.Parallel()
+
+	words := &fakeWords{lessonEntries: map[string][]vocabulary.Entry{
+		"lesson-1": {{ID: "l-1", Word: "hello", Meaning: "xin chào"}, {ID: "l-2", Word: "meet", Meaning: "gặp"}},
+	}}
+
+	questions, err := newService(words).LessonSession(context.Background(), course.Viewer{}, "lesson-1")
+	if err != nil {
+		t.Fatalf("LessonSession() returned error: %v", err)
+	}
+	if len(questions) != 0 {
+		t.Errorf("len = %d, want 0", len(questions))
+	}
+}
+
+func TestCheckLessonNeverTouchesTheReviewQueue(t *testing.T) {
+	t.Parallel()
+
+	words := &fakeWords{lessonEntries: lessonWords()}
+	service := newService(words)
+
+	wrong, err := service.CheckLesson(context.Background(), course.Viewer{}, "lesson-1", "l-1", practice.KindFillBlank, "goodbye")
+	if err != nil {
+		t.Fatalf("CheckLesson() returned error: %v", err)
+	}
+	if wrong.Correct || wrong.Penalised || wrong.Expected != "hello" {
+		t.Errorf("sai: result = %+v, want Correct=false, Penalised=false, Expected=hello", wrong)
+	}
+
+	right, err := service.CheckLesson(context.Background(), course.Viewer{}, "lesson-1", "l-2", practice.KindMultipleChoice, "gặp")
+	if err != nil {
+		t.Fatalf("CheckLesson() returned error: %v", err)
+	}
+	if !right.Correct {
+		t.Errorf("đúng: result = %+v, want Correct=true", right)
+	}
+
+	if len(words.graded) != 0 {
+		t.Errorf("graded = %v, want không chấm gì sang SM-2", words.graded)
+	}
+}
+
+func TestCheckLessonOnlyAcceptsWordsOfThatLesson(t *testing.T) {
+	t.Parallel()
+
+	// id-1 là từ đã mở khoá, nhưng không thuộc lesson-1.
+	words := &fakeWords{cards: pool(), lessonEntries: lessonWords()}
+
+	_, err := newService(words).CheckLesson(context.Background(), course.Viewer{}, "lesson-1", "id-1", practice.KindMultipleChoice, "miễn cưỡng")
+	if !errors.Is(err, practice.ErrNotFound) {
+		t.Fatalf("error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestCheckLessonRejectsAnUnknownKindBeforeReadingAnything(t *testing.T) {
+	t.Parallel()
+
+	words := &fakeWords{lessonEntries: lessonWords()}
+
+	_, err := newService(words).CheckLesson(context.Background(), course.Viewer{}, "lesson-1", "l-1", practice.Kind("essay"), "x")
+	if !errors.Is(err, practice.ErrInvalidKind) {
+		t.Fatalf("error = %v, want ErrInvalidKind", err)
+	}
+	if words.lessonAsked {
+		t.Error("đã đọc từ vựng dù dạng câu hỏi không hợp lệ")
+	}
 }

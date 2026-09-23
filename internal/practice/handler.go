@@ -13,6 +13,7 @@ import (
 
 	"github.com/nguyensongtai/lingora-api/internal/api"
 	"github.com/nguyensongtai/lingora-api/internal/auth"
+	"github.com/nguyensongtai/lingora-api/internal/course"
 	"github.com/nguyensongtai/lingora-api/internal/httpx"
 	"github.com/nguyensongtai/lingora-api/internal/vocabulary"
 )
@@ -21,6 +22,8 @@ import (
 type service interface {
 	Session(ctx context.Context, userID string, size int) ([]Question, error)
 	Check(ctx context.Context, userID, entryID string, kind Kind, answer string) (Result, error)
+	LessonSession(ctx context.Context, viewer course.Viewer, lessonID string) ([]Question, error)
+	CheckLesson(ctx context.Context, viewer course.Viewer, lessonID, entryID string, kind Kind, answer string) (Result, error)
 }
 
 // Handler ánh xạ HTTP sang nghiệp vụ luyện tập.
@@ -47,11 +50,16 @@ func (h *Handler) session(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Như days của lịch sử: size là tuỳ chọn hiển thị, giá trị hỏng đi tiếp
-	// với 0 và service kẹp về mặc định.
-	size, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("size")))
-
-	questions, err := h.service.Session(r.Context(), userID, size)
+	var questions []Question
+	var err error
+	if lessonID := strings.TrimSpace(r.URL.Query().Get("lesson_id")); lessonID != "" {
+		questions, err = h.service.LessonSession(r.Context(), course.ViewerFrom(r), lessonID)
+	} else {
+		// Như days của lịch sử: size là tuỳ chọn hiển thị, giá trị hỏng đi
+		// tiếp với 0 và service kẹp về mặc định.
+		size, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("size")))
+		questions, err = h.service.Session(r.Context(), userID, size)
+	}
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -91,7 +99,14 @@ func (h *Handler) check(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.service.Check(r.Context(), userID, body.EntryId, Kind(body.Kind), body.Answer)
+	var result Result
+	var err error
+	if body.LessonId != nil && strings.TrimSpace(*body.LessonId) != "" {
+		result, err = h.service.CheckLesson(r.Context(), course.ViewerFrom(r),
+			strings.TrimSpace(*body.LessonId), body.EntryId, Kind(body.Kind), body.Answer)
+	} else {
+		result, err = h.service.Check(r.Context(), userID, body.EntryId, Kind(body.Kind), body.Answer)
+	}
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -113,6 +128,12 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 			map[string]string{"kind": "phải là multiple_choice, fill_blank hoặc listen_choose"})
 	case errors.Is(err, ErrNotFound), errors.Is(err, vocabulary.ErrNotFound), errors.Is(err, vocabulary.ErrNotUnlocked):
 		httpx.Error(w, http.StatusNotFound, httpx.CodeNotFound, "Không tìm thấy câu hỏi này.", nil)
+	case errors.Is(err, course.ErrNotFound), errors.Is(err, course.ErrLessonNotFound):
+		// Bài của khoá nháp cũng rơi vào đây, cố ý giống hệt bài không tồn tại.
+		httpx.Error(w, http.StatusNotFound, httpx.CodeNotFound, "Không tìm thấy bài học này.", nil)
+	case errors.Is(err, course.ErrInvalidID):
+		httpx.Error(w, http.StatusBadRequest, httpx.CodeValidation, "Dữ liệu không hợp lệ.",
+			map[string]string{"lesson_id": "phải là UUID hợp lệ"})
 	case errors.Is(err, vocabulary.ErrInvalidID):
 		httpx.Error(w, http.StatusBadRequest, httpx.CodeValidation, "Dữ liệu không hợp lệ.",
 			map[string]string{"entry_id": "phải là UUID hợp lệ"})

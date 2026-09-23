@@ -411,6 +411,11 @@ type PracticeAnswer struct {
 	Answer  string       `json:"answer"`
 	EntryId string       `json:"entry_id"`
 	Kind    PracticeKind `json:"kind"`
+
+	// LessonId Có khi câu hỏi đến từ lượt luyện trong bài (session với lesson_id).
+	// Khi đó câu sai KHÔNG đụng tới lịch ôn: đây là lần gặp đầu, không
+	// phải ôn.
+	LessonId *string `json:"lesson_id,omitempty"`
 }
 
 // PracticeKind defines model for PracticeKind.
@@ -449,7 +454,7 @@ type PracticeResult struct {
 
 	// Penalised Câu sai đẩy từ về đầu hàng đợi ôn. Trả lời ĐÚNG không kéo dài
 	// khoảng cách ôn — luyện dồn một buổi không được biến một từ vừa gặp
-	// thành "thành thạo".
+	// thành "thành thạo". Luôn là false với luyện tập trong bài.
 	Penalised bool `json:"penalised"`
 }
 
@@ -688,7 +693,12 @@ type ListCoursesParams struct {
 // GetPracticeSessionParams defines parameters for GetPracticeSession.
 type GetPracticeSessionParams struct {
 	// Size Số câu muốn có, mặc định 10, trần 30. Ngoài khoảng thì kẹp về biên.
+	// Bỏ qua khi có lesson_id: luyện trong bài luôn hỏi hết từ của bài.
 	Size *int `form:"size,omitempty" json:"size,omitempty"`
+
+	// LessonId Luyện riêng từ của một bài, kể cả khi người học chưa bấm "Đã xong".
+	// Không có thì luyện từ vốn từ đã mở khoá, ưu tiên từ đến hạn ôn.
+	LessonId *string `form:"lesson_id,omitempty" json:"lesson_id,omitempty"`
 }
 
 // GetProgressHistoryParams defines parameters for GetProgressHistory.

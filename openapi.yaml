@@ -611,9 +611,21 @@ paths:
         - name: size
           in: query
           required: false
-          description: Số câu muốn có, mặc định 10, trần 30. Ngoài khoảng thì kẹp về biên.
+          description: |
+            Số câu muốn có, mặc định 10, trần 30. Ngoài khoảng thì kẹp về biên.
+            Bỏ qua khi có lesson_id: luyện trong bài luôn hỏi hết từ của bài.
           schema:
             type: integer
+        - name: lesson_id
+          in: query
+          required: false
+          description: |
+            Luyện riêng từ của một bài, kể cả khi người học chưa bấm "Đã xong".
+            Không có thì luyện từ vốn từ đã mở khoá, ưu tiên từ đến hạn ôn.
+          schema:
+            type: string
+            format: uuid
+            x-go-type: string
       responses:
         '200':
           description: Phiên luyện tập
@@ -621,8 +633,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PracticeSession'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /me/practice/answers:
     post:
@@ -1630,6 +1646,14 @@ components:
         answer:
           type: string
           description: Lựa chọn đã chọn, hoặc chuỗi đã gõ. So sánh bỏ qua hoa/thường và khoảng trắng thừa.
+        lesson_id:
+          type: string
+          format: uuid
+          x-go-type: string
+          description: |
+            Có khi câu hỏi đến từ lượt luyện trong bài (session với lesson_id).
+            Khi đó câu sai KHÔNG đụng tới lịch ôn: đây là lần gặp đầu, không
+            phải ôn.
 
     PracticeResult:
       type: object
@@ -1645,7 +1669,7 @@ components:
           description: |
             Câu sai đẩy từ về đầu hàng đợi ôn. Trả lời ĐÚNG không kéo dài
             khoảng cách ôn — luyện dồn một buổi không được biến một từ vừa gặp
-            thành "thành thạo".
+            thành "thành thạo". Luôn là false với luyện tập trong bài.
 
     ProgressHistory:
       type: object

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nguyensongtai/lingora-api/internal/course"
 	"github.com/nguyensongtai/lingora-api/internal/vocabulary"
 )
 
@@ -20,11 +21,20 @@ import (
 type words interface {
 	List(ctx context.Context, userID string, state *vocabulary.State) ([]vocabulary.Card, error)
 	Review(ctx context.Context, userID, entryID string, grade vocabulary.Grade) (vocabulary.Review, error)
+	ListByLesson(ctx context.Context, lessonID string) ([]vocabulary.Entry, error)
+}
+
+// lessons là cửa gói này nhìn sang course, chỉ dùng cho luyện tập trong bài:
+// người này có được đọc bài không, và bài thuộc bậc nào.
+type lessons interface {
+	GetLesson(ctx context.Context, viewer course.Viewer, lessonID string) (course.Lesson, error)
+	Get(ctx context.Context, viewer course.Viewer, id string) (course.Course, error)
 }
 
 // Service dựng và chấm phiên luyện tập.
 type Service struct {
-	words words
+	words   words
+	lessons lessons
 
 	now func() time.Time
 	// shuffle tách ra để test cố định được thứ tự; mặc định là ngẫu nhiên thật.
@@ -45,8 +55,8 @@ func WithShuffle(shuffle func(n int, swap func(i, j int))) Option {
 	return func(s *Service) { s.shuffle = shuffle }
 }
 
-func NewService(words words, opts ...Option) *Service {
-	service := &Service{words: words, now: time.Now, shuffle: rand.Shuffle}
+func NewService(words words, lessons lessons, opts ...Option) *Service {
+	service := &Service{words: words, lessons: lessons, now: time.Now, shuffle: rand.Shuffle}
 	for _, opt := range opts {
 		opt(service)
 	}
@@ -190,19 +200,102 @@ func (s *Service) Check(ctx context.Context, userID, entryID string, kind Kind, 
 		return Result{}, err
 	}
 
-	expected := card.Word
-	if kind == KindMultipleChoice {
-		expected = card.Meaning
-	}
-
-	if normalise(answer) == normalise(expected) {
-		return Result{Correct: true, Expected: expected}, nil
+	result := grade(card, kind, answer)
+	if result.Correct {
+		return result, nil
 	}
 
 	if _, err := s.words.Review(ctx, userID, entryID, vocabulary.GradeForgot); err != nil {
 		return Result{}, fmt.Errorf("penalise %s: %w", entryID, err)
 	}
-	return Result{Correct: false, Expected: expected, Penalised: true}, nil
+	result.Penalised = true
+	return result, nil
+}
+
+// grade so câu trả lời với đáp án của đúng dạng câu hỏi đó.
+func grade(card vocabulary.Card, kind Kind, answer string) Result {
+	expected := card.Word
+	if kind == KindMultipleChoice {
+		expected = card.Meaning
+	}
+	return Result{Correct: normalise(answer) == normalise(expected), Expected: expected}
+}
+
+/* ---------- luyện tập trong bài ---------- */
+
+// LessonSession dựng lượt luyện từ chính những từ một bài dạy, kể cả khi người
+// học chưa bấm "Đã xong" — đó là lúc cần luyện nhất.
+//
+// Hỏi hết từ của bài (tới trần MaxSessionSize) chứ không theo size: một bài có
+// sáu từ, và luyện năm trong sáu thì bỏ sót đúng một từ vừa học.
+func (s *Service) LessonSession(ctx context.Context, viewer course.Viewer, lessonID string) ([]Question, error) {
+	cards, err := s.lessonCards(ctx, viewer, lessonID)
+	if err != nil {
+		return nil, err
+	}
+	if len(cards) < MinOptions {
+		return []Question{}, nil
+	}
+
+	// Không xếp theo lịch ôn như Session: từ của bài chưa có lịch nào. Chỉ xáo
+	// để lượt sau không lặp đúng thứ tự người soạn.
+	ordered := make([]vocabulary.Card, len(cards))
+	copy(ordered, cards)
+	s.shuffle(len(ordered), func(i, j int) { ordered[i], ordered[j] = ordered[j], ordered[i] })
+	if len(ordered) > MaxSessionSize {
+		ordered = ordered[:MaxSessionSize]
+	}
+
+	questions := make([]Question, 0, len(ordered))
+	for index, card := range ordered {
+		questions = append(questions, s.buildQuestion(card, cards, index))
+	}
+	return questions, nil
+}
+
+// CheckLesson chấm một câu của lượt luyện trong bài.
+//
+// KHÔNG đụng tới lịch ôn, kể cả khi sai và kể cả khi bài đã học xong. Đây là
+// lần gặp đầu chứ không phải ôn, nên quy tắc "sai thì phạt" của Session không
+// áp vào — người dùng đã chốt như vậy.
+func (s *Service) CheckLesson(ctx context.Context, viewer course.Viewer, lessonID, entryID string, kind Kind, answer string) (Result, error) {
+	if !kind.Valid() {
+		return Result{}, fmt.Errorf("%w: %q", ErrInvalidKind, kind)
+	}
+
+	cards, err := s.lessonCards(ctx, viewer, lessonID)
+	if err != nil {
+		return Result{}, err
+	}
+	for _, card := range cards {
+		if card.ID == entryID {
+			return grade(card, kind, answer), nil
+		}
+	}
+	return Result{}, fmt.Errorf("check lesson answer %s: %w", entryID, ErrNotFound)
+}
+
+// lessonCards đọc từ của một bài mà người này được phép đọc. Bài của khoá nháp
+// dừng ở ErrNotFound của course trước khi chạm tới từ vựng.
+func (s *Service) lessonCards(ctx context.Context, viewer course.Viewer, lessonID string) ([]vocabulary.Card, error) {
+	lesson, err := s.lessons.GetLesson(ctx, viewer, lessonID)
+	if err != nil {
+		return nil, fmt.Errorf("lesson practice %s: %w", lessonID, err)
+	}
+	owner, err := s.lessons.Get(ctx, viewer, lesson.CourseID)
+	if err != nil {
+		return nil, fmt.Errorf("lesson practice %s: %w", lessonID, err)
+	}
+	entries, err := s.words.ListByLesson(ctx, lessonID)
+	if err != nil {
+		return nil, fmt.Errorf("lesson practice %s: %w", lessonID, err)
+	}
+
+	cards := make([]vocabulary.Card, 0, len(entries))
+	for _, entry := range entries {
+		cards = append(cards, vocabulary.Card{Entry: entry, Level: string(owner.Level)})
+	}
+	return cards, nil
 }
 
 // find lấy một từ trong đúng vốn từ đã mở khoá của người học. Từ chưa mở khoá

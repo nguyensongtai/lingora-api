@@ -102,10 +102,12 @@ func run() error {
 	vocabularyHandler := vocabulary.NewHandler(vocabularyService)
 	// Bài học trả kèm từ vựng của nó, nên course dựng sau vocabulary. vocabulary
 	// chỉ cần repo của course, nên không có vòng phụ thuộc.
-	courseHandler := course.NewHandler(course.NewService(courseRepo, vocabularyService))
+	courseService := course.NewService(courseRepo, vocabularyService)
+	courseHandler := course.NewHandler(courseService)
 	// Luyện tập dựng câu hỏi từ chính vốn từ đã mở khoá, nên nó dùng lại đúng
-	// service từ vựng thay vì hỏi database lần nữa bằng quy tắc chép lại.
-	practiceHandler := practice.NewHandler(practice.NewService(vocabularyService))
+	// service từ vựng thay vì hỏi database lần nữa bằng quy tắc chép lại. Luyện
+	// trong bài hỏi course để áp đúng quy tắc ẩn bản nháp.
+	practiceHandler := practice.NewHandler(practice.NewService(vocabularyService, courseService))
 
 	router := chi.NewRouter()
 	router.Use(

@@ -157,7 +157,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
-	found, err := h.service.Get(r.Context(), viewerFrom(r), chi.URLParam(r, "courseID"))
+	found, err := h.service.Get(r.Context(), ViewerFrom(r), chi.URLParam(r, "courseID"))
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -166,7 +166,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getBySlug(w http.ResponseWriter, r *http.Request) {
-	found, err := h.service.GetBySlug(r.Context(), viewerFrom(r), chi.URLParam(r, "slug"))
+	found, err := h.service.GetBySlug(r.Context(), ViewerFrom(r), chi.URLParam(r, "slug"))
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -181,7 +181,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	page, err := h.service.List(r.Context(), viewerFrom(r), filter)
+	page, err := h.service.List(r.Context(), ViewerFrom(r), filter)
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -240,7 +240,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listLessons(w http.ResponseWriter, r *http.Request) {
-	lessons, err := h.service.ListLessons(r.Context(), viewerFrom(r), chi.URLParam(r, "courseID"))
+	lessons, err := h.service.ListLessons(r.Context(), ViewerFrom(r), chi.URLParam(r, "courseID"))
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -253,9 +253,12 @@ func (h *Handler) listLessons(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, api.LessonList{Items: items})
 }
 
-// viewerFrom dựng người đọc từ claims mà optionalAuth gắn vào. Không có claims
+// ViewerFrom dựng người đọc từ claims mà middleware đã gắn. Không có claims
 // nghĩa là khách vãng lai, đó là trường hợp bình thường ở đây chứ không phải lỗi.
-func viewerFrom(r *http.Request) Viewer {
+//
+// Xuất ra để những gói khác đọc nội dung khoá học (như luyện tập trong bài)
+// dùng đúng một quy tắc "ai là admin", thay vì mỗi nơi tự so role.
+func ViewerFrom(r *http.Request) Viewer {
 	claims, ok := auth.ClaimsFrom(r.Context())
 	return Viewer{IsAdmin: ok && claims.Role == auth.RoleAdmin}
 }

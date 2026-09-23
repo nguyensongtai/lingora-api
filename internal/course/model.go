@@ -1,7 +1,11 @@
 // Package course chứa toàn bộ nghiệp vụ khoá học và danh sách bài học của khoá.
 package course
 
-import "time"
+import (
+	"time"
+
+	"github.com/nguyensongtai/lingora-api/internal/vocabulary"
+)
 
 // Level là trình độ CEFR của khoá học.
 type Level string
@@ -123,6 +127,10 @@ type Block struct {
 type LessonDetail struct {
 	Lesson
 	Blocks []Block
+	// Words là từ vựng của bài. Chúng vốn đã thuộc về bài (lesson_id NOT NULL)
+	// nhưng trước đây chỉ lộ ra sau khi học xong, ở màn Từ vựng — tức là người
+	// học được ôn những từ mà bài chưa bao giờ dạy.
+	Words []vocabulary.Entry
 }
 
 // CreateParams là dữ liệu đã hợp lệ để tạo khoá học.

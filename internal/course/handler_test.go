@@ -16,6 +16,7 @@ import (
 
 	"github.com/nguyensongtai/lingora-api/internal/auth"
 	"github.com/nguyensongtai/lingora-api/internal/course"
+	"github.com/nguyensongtai/lingora-api/internal/vocabulary"
 )
 
 type fakeService struct {
@@ -25,8 +26,9 @@ type fakeService struct {
 	// thực sự dựng nó từ token hay không.
 	lastViewer course.Viewer
 
-	// blocks là nội dung mà GetLessonDetail trả kèm.
+	// blocks và words là nội dung mà GetLessonDetail trả kèm.
 	blocks          []course.Block
+	words           []vocabulary.Entry
 	replaceBlocksFn func(context.Context, string, []course.Block) error
 	replacedFor     string
 	replacedBlocks  []course.Block
@@ -496,7 +498,7 @@ func (f *fakeService) GetLessonDetail(ctx context.Context, viewer course.Viewer,
 	if err != nil {
 		return course.LessonDetail{}, err
 	}
-	return course.LessonDetail{Lesson: lesson, Blocks: f.blocks}, nil
+	return course.LessonDetail{Lesson: lesson, Blocks: f.blocks, Words: f.words}, nil
 }
 
 func (f *fakeService) ReplaceBlocks(ctx context.Context, lessonID string, blocks []course.Block) error {
@@ -580,6 +582,43 @@ func TestLessonItemRoutesAreFlat(t *testing.T) {
 
 		if recorder := do(t, svc, http.MethodDelete, "/lessons/lesson-9", ""); recorder.Code != http.StatusNoContent {
 			t.Fatalf("status = %d, want 204", recorder.Code)
+		}
+	})
+}
+
+func TestGetLessonReturnsItsVocabulary(t *testing.T) {
+	t.Parallel()
+
+	lesson := func(_ context.Context, id string) (course.Lesson, error) { return course.Lesson{ID: id}, nil }
+
+	t.Run("có từ", func(t *testing.T) {
+		t.Parallel()
+
+		svc := &fakeService{t: t, getLessonFn: lesson, words: []vocabulary.Entry{
+			{ID: "w-1", LessonID: "lesson-1", Word: "hello", IPA: "/həˈləʊ/", Meaning: "xin chào", ExampleVI: "Chào bạn."},
+		}}
+
+		body := decodeBody(t, do(t, svc, http.MethodGet, "/lessons/lesson-1", ""))
+		words, ok := body["vocabulary"].([]any)
+		if !ok || len(words) != 1 {
+			t.Fatalf("vocabulary = %v, want một phần tử", body["vocabulary"])
+		}
+		word := words[0].(map[string]any)
+		for key, want := range map[string]string{"word": "hello", "ipa": "/həˈləʊ/", "meaning": "xin chào", "example_vi": "Chào bạn."} {
+			if word[key] != want {
+				t.Errorf("vocabulary[0].%s = %v, want %q", key, word[key], want)
+			}
+		}
+	})
+
+	t.Run("không có từ vẫn là mảng", func(t *testing.T) {
+		t.Parallel()
+
+		svc := &fakeService{t: t, getLessonFn: lesson}
+
+		body := decodeBody(t, do(t, svc, http.MethodGet, "/lessons/lesson-1", ""))
+		if words, ok := body["vocabulary"].([]any); !ok || len(words) != 0 {
+			t.Errorf("vocabulary = %#v, want [] chứ không phải null", body["vocabulary"])
 		}
 	})
 }

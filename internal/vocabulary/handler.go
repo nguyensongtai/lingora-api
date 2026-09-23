@@ -78,7 +78,7 @@ func (h *Handler) listByLesson(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]api.VocabularyEntry, 0, len(entries))
 	for _, entry := range entries {
-		items = append(items, toAPIEntry(entry))
+		items = append(items, ToAPIEntry(entry))
 	}
 	httpx.JSON(w, http.StatusOK, api.VocabularyEntryList{Items: items})
 }
@@ -103,7 +103,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Location", "/v1/vocabulary/"+created.ID)
-	httpx.JSON(w, http.StatusCreated, toAPIEntry(created))
+	httpx.JSON(w, http.StatusCreated, ToAPIEntry(created))
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
@@ -124,7 +124,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, toAPIEntry(updated))
+	httpx.JSON(w, http.StatusOK, ToAPIEntry(updated))
 }
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
@@ -159,7 +159,7 @@ func (h *Handler) listMine(w http.ResponseWriter, r *http.Request) {
 	items := make([]api.VocabularyCard, 0, len(cards))
 	for _, card := range cards {
 		items = append(items, api.VocabularyCard{
-			Entry:       toAPIEntry(card.Entry),
+			Entry:       ToAPIEntry(card.Entry),
 			Level:       api.CourseLevel(card.Level),
 			State:       api.VocabularyState(card.StateOn(today)),
 			Familiarity: card.Familiarity(),
@@ -231,7 +231,7 @@ func parseState(raw string) (*State, error) {
 	}
 }
 
-func toAPIEntry(entry Entry) api.VocabularyEntry {
+func ToAPIEntry(entry Entry) api.VocabularyEntry {
 	return api.VocabularyEntry{
 		Id:        entry.ID,
 		LessonId:  entry.LessonID,

@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/nguyensongtai/lingora-api/internal/vocabulary"
 )
 
 // Giới hạn độ dài, khớp với ràng buộc của UI và của database.
@@ -54,14 +56,21 @@ type repository interface {
 	ReplaceBlocks(ctx context.Context, lessonID string, blocks []Block) error
 }
 
-// Service giữ nghiệp vụ khoá học: chuẩn hoá đầu vào, validate, phân trang.
-type Service struct {
-	repo repository
+// lessonWords là cửa duy nhất Service nhìn sang gói vocabulary: đọc từ của
+// một bài để trả kèm nội dung.
+type lessonWords interface {
+	ListByLesson(ctx context.Context, lessonID string) ([]vocabulary.Entry, error)
 }
 
-// NewService nhận repository đã sẵn sàng dùng.
-func NewService(repo repository) *Service {
-	return &Service{repo: repo}
+// Service giữ nghiệp vụ khoá học: chuẩn hoá đầu vào, validate, phân trang.
+type Service struct {
+	repo  repository
+	words lessonWords
+}
+
+// NewService nhận repository và nguồn từ vựng đã sẵn sàng dùng.
+func NewService(repo repository, words lessonWords) *Service {
+	return &Service{repo: repo, words: words}
 }
 
 // Create chuẩn hoá và kiểm tra dữ liệu trước khi ghi. Status rỗng mặc định là draft.

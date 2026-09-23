@@ -96,11 +96,13 @@ func run() error {
 
 	authHandler := auth.NewHandler(authService, limiter)
 	courseRepo := course.NewRepo(pool)
-	courseHandler := course.NewHandler(course.NewService(courseRepo))
 	// progress hỏi course xem bài còn sống hay không, nên dùng chung đúng repo đó.
 	progressHandler := progress.NewHandler(progress.NewService(progress.NewRepo(pool), courseRepo))
 	vocabularyService := vocabulary.NewService(vocabulary.NewRepo(pool), courseRepo)
 	vocabularyHandler := vocabulary.NewHandler(vocabularyService)
+	// Bài học trả kèm từ vựng của nó, nên course dựng sau vocabulary. vocabulary
+	// chỉ cần repo của course, nên không có vòng phụ thuộc.
+	courseHandler := course.NewHandler(course.NewService(courseRepo, vocabularyService))
 	// Luyện tập dựng câu hỏi từ chính vốn từ đã mở khoá, nên nó dùng lại đúng
 	// service từ vựng thay vì hỏi database lần nữa bằng quy tắc chép lại.
 	practiceHandler := practice.NewHandler(practice.NewService(vocabularyService))

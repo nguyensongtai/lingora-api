@@ -143,7 +143,7 @@ func TestCreateNormalisesInputAndDefaultsStatus(t *testing.T) {
 		return course.Course{ID: "id-1", Slug: params.Slug}, nil
 	}}
 
-	created, err := course.NewService(repo).Create(context.Background(), course.CreateParams{
+	created, err := course.NewService(repo, noWords{}).Create(context.Background(), course.CreateParams{
 		Slug:        "  Ngu-Phap-Co-Ban  ",
 		Title:       "  Ngữ pháp cơ bản  ",
 		Description: "  Khoá nhập môn  ",
@@ -215,7 +215,7 @@ func TestCreateRejectsInvalidInput(t *testing.T) {
 			t.Parallel()
 
 			// createFn để nil: repo bị gọi nghĩa là validate đã lọt.
-			service := course.NewService(&fakeRepo{t: t})
+			service := course.NewService(&fakeRepo{t: t}, noWords{})
 
 			_, err := service.Create(context.Background(), tc.params)
 			fields := fieldsOf(t, err)
@@ -239,7 +239,7 @@ func TestCreatePropagatesSlugTaken(t *testing.T) {
 		return course.Course{}, course.ErrSlugTaken
 	}}
 
-	_, err := course.NewService(repo).Create(context.Background(), course.CreateParams{
+	_, err := course.NewService(repo, noWords{}).Create(context.Background(), course.CreateParams{
 		Slug: "grammar", Title: "Tiêu đề", Level: course.LevelB1,
 	})
 	if !errors.Is(err, course.ErrSlugTaken) {
@@ -254,7 +254,7 @@ func TestGetPropagatesNotFound(t *testing.T) {
 		return course.Course{}, course.ErrNotFound
 	}}
 
-	if _, err := course.NewService(repo).Get(context.Background(), adminViewer, "id-1"); !errors.Is(err, course.ErrNotFound) {
+	if _, err := course.NewService(repo, noWords{}).Get(context.Background(), adminViewer, "id-1"); !errors.Is(err, course.ErrNotFound) {
 		t.Fatalf("error = %v, want it to match ErrNotFound", err)
 	}
 }
@@ -282,7 +282,7 @@ func TestListClampsPageSizeAndAsksForOneExtraRow(t *testing.T) {
 				return nil, nil
 			}}
 
-			if _, err := course.NewService(repo).List(context.Background(), adminViewer, course.ListFilter{PageSize: tc.requested}); err != nil {
+			if _, err := course.NewService(repo, noWords{}).List(context.Background(), adminViewer, course.ListFilter{PageSize: tc.requested}); err != nil {
 				t.Fatalf("List() returned error: %v", err)
 			}
 			if asked != tc.wantAsked {
@@ -309,7 +309,7 @@ func TestListBuildsNextCursorOnlyWhenMoreRowsExist(t *testing.T) {
 			return rows, nil
 		}}
 
-		page, err := course.NewService(repo).List(context.Background(), adminViewer, course.ListFilter{PageSize: 2})
+		page, err := course.NewService(repo, noWords{}).List(context.Background(), adminViewer, course.ListFilter{PageSize: 2})
 		if err != nil {
 			t.Fatalf("List() returned error: %v", err)
 		}
@@ -331,7 +331,7 @@ func TestListBuildsNextCursorOnlyWhenMoreRowsExist(t *testing.T) {
 			return rows[:2], nil
 		}}
 
-		page, err := course.NewService(repo).List(context.Background(), adminViewer, course.ListFilter{PageSize: 5})
+		page, err := course.NewService(repo, noWords{}).List(context.Background(), adminViewer, course.ListFilter{PageSize: 5})
 		if err != nil {
 			t.Fatalf("List() returned error: %v", err)
 		}
@@ -347,7 +347,7 @@ func TestListBuildsNextCursorOnlyWhenMoreRowsExist(t *testing.T) {
 func TestListRejectsInvalidFilters(t *testing.T) {
 	t.Parallel()
 
-	_, err := course.NewService(&fakeRepo{t: t}).List(context.Background(), adminViewer, course.ListFilter{
+	_, err := course.NewService(&fakeRepo{t: t}, noWords{}).List(context.Background(), adminViewer, course.ListFilter{
 		Status: ptr(course.Status("live")),
 		Level:  ptr(course.Level("Z9")),
 	})
@@ -367,7 +367,7 @@ func TestUpdateRejectsEmptyAndContradictoryInput(t *testing.T) {
 	t.Run("không có field nào", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := course.NewService(&fakeRepo{t: t}).Update(context.Background(), "id-1", course.UpdateParams{})
+		_, err := course.NewService(&fakeRepo{t: t}, noWords{}).Update(context.Background(), "id-1", course.UpdateParams{})
 		if _, ok := fieldsOf(t, err)["body"]; !ok {
 			t.Errorf("want a validation entry for body")
 		}
@@ -376,7 +376,7 @@ func TestUpdateRejectsEmptyAndContradictoryInput(t *testing.T) {
 	t.Run("vừa đặt vừa xoá ảnh bìa", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := course.NewService(&fakeRepo{t: t}).Update(context.Background(), "id-1", course.UpdateParams{
+		_, err := course.NewService(&fakeRepo{t: t}, noWords{}).Update(context.Background(), "id-1", course.UpdateParams{
 			CoverImageURL:   new("https://cdn.example.com/a.png"),
 			ClearCoverImage: true,
 		})
@@ -395,7 +395,7 @@ func TestUpdateNormalisesSlug(t *testing.T) {
 		return course.Course{ID: "id-1"}, nil
 	}}
 
-	if _, err := course.NewService(repo).Update(context.Background(), "id-1", course.UpdateParams{
+	if _, err := course.NewService(repo, noWords{}).Update(context.Background(), "id-1", course.UpdateParams{
 		Slug: new("  Ngu-Phap  "),
 	}); err != nil {
 		t.Fatalf("Update() returned error: %v", err)
@@ -413,7 +413,7 @@ func TestDeletePropagatesNotFound(t *testing.T) {
 		return course.ErrNotFound
 	}}
 
-	if err := course.NewService(repo).Delete(context.Background(), "id-1"); !errors.Is(err, course.ErrNotFound) {
+	if err := course.NewService(repo, noWords{}).Delete(context.Background(), "id-1"); !errors.Is(err, course.ErrNotFound) {
 		t.Fatalf("error = %v, want it to match ErrNotFound", err)
 	}
 }
@@ -425,7 +425,7 @@ func TestListLessonsRequiresAnExistingCourse(t *testing.T) {
 		return course.Course{}, course.ErrNotFound
 	}}
 
-	_, err := course.NewService(repo).ListLessons(context.Background(), adminViewer, "id-1")
+	_, err := course.NewService(repo, noWords{}).ListLessons(context.Background(), adminViewer, "id-1")
 	if !errors.Is(err, course.ErrNotFound) {
 		t.Fatalf("error = %v, want it to match ErrNotFound", err)
 	}
@@ -447,7 +447,7 @@ func TestListLessonsReturnsEmptySliceForCourseWithoutLessons(t *testing.T) {
 		},
 	}
 
-	lessons, err := course.NewService(repo).ListLessons(context.Background(), adminViewer, "id-1")
+	lessons, err := course.NewService(repo, noWords{}).ListLessons(context.Background(), adminViewer, "id-1")
 	if err != nil {
 		t.Fatalf("ListLessons() returned error: %v", err)
 	}
@@ -465,7 +465,7 @@ func TestGetBySlugNormalisesInput(t *testing.T) {
 		return course.Course{ID: "id-1"}, nil
 	}}
 
-	if _, err := course.NewService(repo).GetBySlug(context.Background(), adminViewer, "  Ngu-Phap  "); err != nil {
+	if _, err := course.NewService(repo, noWords{}).GetBySlug(context.Background(), adminViewer, "  Ngu-Phap  "); err != nil {
 		t.Fatalf("GetBySlug() returned error: %v", err)
 	}
 	if got != "ngu-phap" {
@@ -512,7 +512,7 @@ func TestCreateEnforcesLengthLimits(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := course.NewService(&fakeRepo{t: t}).Create(context.Background(), tc.params)
+			_, err := course.NewService(&fakeRepo{t: t}, noWords{}).Create(context.Background(), tc.params)
 			if _, ok := fieldsOf(t, err)[tc.wantField]; !ok {
 				t.Errorf("want a validation entry for %q", tc.wantField)
 			}
@@ -528,7 +528,7 @@ func TestCreateAcceptsMaximumLengths(t *testing.T) {
 	}}
 
 	// Đúng ngưỡng vẫn phải qua: giới hạn là "tối đa", không phải "nhỏ hơn".
-	_, err := course.NewService(repo).Create(context.Background(), course.CreateParams{
+	_, err := course.NewService(repo, noWords{}).Create(context.Background(), course.CreateParams{
 		Slug:        strings.Repeat("a", 120),
 		Title:       strings.Repeat("á", 200),
 		Description: strings.Repeat("á", 5000),
@@ -614,7 +614,7 @@ func TestReorderCoursesRequiresTheWholeLevel(t *testing.T) {
 
 		repo := newRepo()
 		want := []string{"khoa-3", "khoa-1", "khoa-2"}
-		if err := course.NewService(repo).ReorderCourses(context.Background(), course.LevelA1, want); err != nil {
+		if err := course.NewService(repo, noWords{}).ReorderCourses(context.Background(), course.LevelA1, want); err != nil {
 			t.Fatalf("ReorderCourses() returned error: %v", err)
 		}
 		if len(repo.reorderCoursesArgs) != 3 || repo.reorderCoursesArgs[0] != "khoa-3" {
@@ -631,7 +631,7 @@ func TestReorderCoursesRequiresTheWholeLevel(t *testing.T) {
 			t.Parallel()
 
 			repo := newRepo()
-			err := course.NewService(repo).ReorderCourses(context.Background(), course.LevelA1, ids)
+			err := course.NewService(repo, noWords{}).ReorderCourses(context.Background(), course.LevelA1, ids)
 
 			var validationErr *course.ValidationError
 			if !errors.As(err, &validationErr) {
@@ -650,7 +650,7 @@ func TestReorderCoursesRequiresTheWholeLevel(t *testing.T) {
 		t.Parallel()
 
 		// listIDsByLevelFn nil: bậc sai thì không được hỏi tới kho.
-		err := course.NewService(&fakeRepo{t: t}).
+		err := course.NewService(&fakeRepo{t: t}, noWords{}).
 			ReorderCourses(context.Background(), course.Level("Z9"), existing)
 
 		var validationErr *course.ValidationError
@@ -701,7 +701,7 @@ func TestGetHidesDraftFromGuests(t *testing.T) {
 	}}
 
 	// 404 chứ không phải 403: 403 xác nhận id đó có thật.
-	if _, err := course.NewService(repo).Get(context.Background(), guestViewer, "id-1"); !errors.Is(err, course.ErrNotFound) {
+	if _, err := course.NewService(repo, noWords{}).Get(context.Background(), guestViewer, "id-1"); !errors.Is(err, course.ErrNotFound) {
 		t.Fatalf("error = %v, want it to match ErrNotFound", err)
 	}
 }
@@ -713,7 +713,7 @@ func TestGetBySlugHidesDraftFromGuests(t *testing.T) {
 		return draftCourse(), nil
 	}}
 
-	if _, err := course.NewService(repo).GetBySlug(context.Background(), guestViewer, "nhap"); !errors.Is(err, course.ErrNotFound) {
+	if _, err := course.NewService(repo, noWords{}).GetBySlug(context.Background(), guestViewer, "nhap"); !errors.Is(err, course.ErrNotFound) {
 		t.Fatalf("error = %v, want it to match ErrNotFound", err)
 	}
 }
@@ -725,7 +725,7 @@ func TestGetShowsDraftToAdmin(t *testing.T) {
 		return draftCourse(), nil
 	}}
 
-	found, err := course.NewService(repo).Get(context.Background(), adminViewer, "id-1")
+	found, err := course.NewService(repo, noWords{}).Get(context.Background(), adminViewer, "id-1")
 	if err != nil {
 		t.Fatalf("Get() returned error: %v", err)
 	}
@@ -745,7 +745,7 @@ func TestListForcesPublishedWhenGuestOmitsStatus(t *testing.T) {
 		return []course.Course{publishedCourse()}, nil
 	}}
 
-	if _, err := course.NewService(repo).List(context.Background(), guestViewer, course.ListFilter{PageSize: 10}); err != nil {
+	if _, err := course.NewService(repo, noWords{}).List(context.Background(), guestViewer, course.ListFilter{PageSize: 10}); err != nil {
 		t.Fatalf("List() returned error: %v", err)
 	}
 	if got == nil {
@@ -762,7 +762,7 @@ func TestListGivesGuestsNothingWhenTheyAskForDrafts(t *testing.T) {
 	repo := &fakeRepo{t: t} // listFn nil: gọi tới repo là test fail.
 	draft := course.StatusDraft
 
-	page, err := course.NewService(repo).List(context.Background(), guestViewer, course.ListFilter{
+	page, err := course.NewService(repo, noWords{}).List(context.Background(), guestViewer, course.ListFilter{
 		Status:   &draft,
 		PageSize: 10,
 	})
@@ -787,7 +787,7 @@ func TestListKeepsAdminStatusFilter(t *testing.T) {
 	}}
 	draft := course.StatusDraft
 
-	if _, err := course.NewService(repo).List(context.Background(), adminViewer, course.ListFilter{
+	if _, err := course.NewService(repo, noWords{}).List(context.Background(), adminViewer, course.ListFilter{
 		Status:   &draft,
 		PageSize: 10,
 	}); err != nil {
@@ -806,7 +806,7 @@ func TestListLessonsHidesLessonsOfADraftCourse(t *testing.T) {
 		return draftCourse(), nil
 	}}
 
-	_, err := course.NewService(repo).ListLessons(context.Background(), guestViewer, "id-1")
+	_, err := course.NewService(repo, noWords{}).ListLessons(context.Background(), guestViewer, "id-1")
 	if !errors.Is(err, course.ErrNotFound) {
 		t.Fatalf("error = %v, want it to match ErrNotFound", err)
 	}
@@ -829,7 +829,7 @@ func TestGetLessonHidesLessonOfADraftCourse(t *testing.T) {
 		},
 	}
 
-	_, err := course.NewService(repo).GetLesson(context.Background(), guestViewer, "lesson-1")
+	_, err := course.NewService(repo, noWords{}).GetLesson(context.Background(), guestViewer, "lesson-1")
 	if !errors.Is(err, course.ErrNotFound) {
 		t.Fatalf("error = %v, want it to match ErrNotFound", err)
 	}

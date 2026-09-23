@@ -156,11 +156,17 @@ func (s *Service) GetLessonDetail(ctx context.Context, viewer Viewer, lessonID s
 		return LessonDetail{}, err
 	}
 
+	// Đọc sau GetLesson chứ không song song: bài của khoá nháp phải dừng ở 404
+	// trước khi chạm tới nội dung của nó.
 	blocks, err := s.repo.ListBlocks(ctx, lessonID)
 	if err != nil {
 		return LessonDetail{}, fmt.Errorf("get lesson detail: %w", err)
 	}
-	return LessonDetail{Lesson: lesson, Blocks: blocks}, nil
+	words, err := s.words.ListByLesson(ctx, lessonID)
+	if err != nil {
+		return LessonDetail{}, fmt.Errorf("get lesson detail: %w", err)
+	}
+	return LessonDetail{Lesson: lesson, Blocks: blocks, Words: words}, nil
 }
 
 // ReplaceBlocks thay toàn bộ nội dung của một bài. Gửi danh sách rỗng là xoá

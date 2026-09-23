@@ -6,7 +6,25 @@ import (
 	"testing"
 
 	"github.com/nguyensongtai/lingora-api/internal/course"
+	"github.com/nguyensongtai/lingora-api/internal/vocabulary"
 )
+
+// noWords là nguồn từ vựng rỗng cho những test không quan tâm tới từ vựng.
+type noWords struct{}
+
+func (noWords) ListByLesson(context.Context, string) ([]vocabulary.Entry, error) { return nil, nil }
+
+// fakeWords trả từ của đúng một bài và ghi lại mình có bị hỏi hay không.
+type fakeWords struct {
+	entries []vocabulary.Entry
+	err     error
+	asked   string
+}
+
+func (f *fakeWords) ListByLesson(_ context.Context, lessonID string) ([]vocabulary.Entry, error) {
+	f.asked = lessonID
+	return f.entries, f.err
+}
 
 func existingCourse(_ context.Context, _ string) (bool, error) { return true, nil }
 
@@ -26,7 +44,7 @@ func TestCreateLessonNormalisesAndRequiresTheCourse(t *testing.T) {
 			},
 		}
 
-		if _, err := course.NewService(repo).CreateLesson(context.Background(), "course-1", course.LessonCreateParams{
+		if _, err := course.NewService(repo, noWords{}).CreateLesson(context.Background(), "course-1", course.LessonCreateParams{
 			Slug:  "  Thi-Hien-Tai  ",
 			Title: "  Thì hiện tại  ",
 		}); err != nil {
@@ -49,7 +67,7 @@ func TestCreateLessonNormalisesAndRequiresTheCourse(t *testing.T) {
 			return false, nil
 		}}
 
-		_, err := course.NewService(repo).CreateLesson(context.Background(), "course-1", course.LessonCreateParams{
+		_, err := course.NewService(repo, noWords{}).CreateLesson(context.Background(), "course-1", course.LessonCreateParams{
 			Slug:  "bai-1",
 			Title: "Bài 1",
 		})
@@ -62,7 +80,7 @@ func TestCreateLessonNormalisesAndRequiresTheCourse(t *testing.T) {
 		t.Parallel()
 
 		// existsFn cũng để nil: validate phải chặn trước mọi lời gọi repo.
-		_, err := course.NewService(&fakeRepo{t: t}).CreateLesson(context.Background(), "course-1", course.LessonCreateParams{
+		_, err := course.NewService(&fakeRepo{t: t}, noWords{}).CreateLesson(context.Background(), "course-1", course.LessonCreateParams{
 			Slug: "SLUG SAI",
 		})
 
@@ -79,7 +97,7 @@ func TestCreateLessonNormalisesAndRequiresTheCourse(t *testing.T) {
 func TestUpdateLessonRejectsEmptyBody(t *testing.T) {
 	t.Parallel()
 
-	_, err := course.NewService(&fakeRepo{t: t}).UpdateLesson(context.Background(), "lesson-1", course.LessonUpdateParams{})
+	_, err := course.NewService(&fakeRepo{t: t}, noWords{}).UpdateLesson(context.Background(), "lesson-1", course.LessonUpdateParams{})
 	if _, ok := fieldsOf(t, err)["body"]; !ok {
 		t.Error("want a validation entry for body")
 	}
@@ -92,7 +110,7 @@ func TestUpdateLessonPropagatesSlugTaken(t *testing.T) {
 		return course.Lesson{}, course.ErrLessonSlugTaken
 	}}
 
-	_, err := course.NewService(repo).UpdateLesson(context.Background(), "lesson-1", course.LessonUpdateParams{
+	_, err := course.NewService(repo, noWords{}).UpdateLesson(context.Background(), "lesson-1", course.LessonUpdateParams{
 		Slug: ptr("bai-1"),
 	})
 	if !errors.Is(err, course.ErrLessonSlugTaken) {
@@ -107,7 +125,7 @@ func TestDeleteLessonPropagatesNotFound(t *testing.T) {
 		return course.ErrLessonNotFound
 	}}
 
-	if err := course.NewService(repo).DeleteLesson(context.Background(), "lesson-1"); !errors.Is(err, course.ErrLessonNotFound) {
+	if err := course.NewService(repo, noWords{}).DeleteLesson(context.Background(), "lesson-1"); !errors.Is(err, course.ErrLessonNotFound) {
 		t.Fatalf("error = %v, want it to match ErrLessonNotFound", err)
 	}
 }
@@ -124,7 +142,7 @@ func TestReorderLessonsAcceptsExactlyTheCurrentSet(t *testing.T) {
 		reorderLessonsFn: func(context.Context, string, []string) (int64, error) { return 3, nil },
 	}
 
-	if err := course.NewService(repo).ReorderLessons(context.Background(), "course-1", []string{"c", "a", "b"}); err != nil {
+	if err := course.NewService(repo, noWords{}).ReorderLessons(context.Background(), "course-1", []string{"c", "a", "b"}); err != nil {
 		t.Fatalf("ReorderLessons() returned error: %v", err)
 	}
 	if got := repo.reorderLessonsArgs; len(got) != 3 || got[0] != "c" {
@@ -159,7 +177,7 @@ func TestReorderLessonsRejectsAnIncompleteSet(t *testing.T) {
 				},
 			}
 
-			err := course.NewService(repo).ReorderLessons(context.Background(), "course-1", tc.requested)
+			err := course.NewService(repo, noWords{}).ReorderLessons(context.Background(), "course-1", tc.requested)
 			if _, ok := fieldsOf(t, err)["lesson_ids"]; !ok {
 				t.Errorf("want a validation entry for lesson_ids, got %v", err)
 			}
@@ -172,7 +190,7 @@ func TestReorderLessonsRequiresTheCourse(t *testing.T) {
 
 	repo := &fakeRepo{t: t, existsFn: func(context.Context, string) (bool, error) { return false, nil }}
 
-	err := course.NewService(repo).ReorderLessons(context.Background(), "course-1", []string{"a"})
+	err := course.NewService(repo, noWords{}).ReorderLessons(context.Background(), "course-1", []string{"a"})
 	if !errors.Is(err, course.ErrNotFound) {
 		t.Fatalf("error = %v, want it to match ErrNotFound", err)
 	}
@@ -188,7 +206,7 @@ func blockService(t *testing.T, repo *fakeRepo) *course.Service {
 			return course.Lesson{ID: "lesson-1"}, nil
 		}
 	}
-	return course.NewService(repo)
+	return course.NewService(repo, noWords{})
 }
 
 func replace(t *testing.T, blocks []course.Block) error {
@@ -288,12 +306,72 @@ func TestReplaceBlocksRequiresAnExistingLesson(t *testing.T) {
 		return course.Lesson{}, course.ErrLessonNotFound
 	}}
 
-	err := course.NewService(repo).ReplaceBlocks(context.Background(), "khong-co", nil)
+	err := course.NewService(repo, noWords{}).ReplaceBlocks(context.Background(), "khong-co", nil)
 
 	if !errors.Is(err, course.ErrLessonNotFound) {
 		t.Fatalf("error = %v, want it to match ErrLessonNotFound", err)
 	}
 	if repo.replacedFor != "" {
 		t.Error("repo bị gọi dù bài không tồn tại")
+	}
+}
+
+/* ---------- chi tiết bài ---------- */
+
+// lessonIn dựng kho có đúng một bài, nằm trong một khoá mang status cho trước.
+func lessonIn(t *testing.T, courseStatus course.Status) *fakeRepo {
+	return &fakeRepo{
+		t: t,
+		getLessonFn: func(context.Context, string) (course.Lesson, error) {
+			return course.Lesson{ID: "lesson-1", CourseID: "course-1"}, nil
+		},
+		getByIDFn: func(context.Context, string) (course.Course, error) {
+			return course.Course{ID: "course-1", Status: courseStatus}, nil
+		},
+	}
+}
+
+func TestGetLessonDetailReturnsTheLessonsWords(t *testing.T) {
+	t.Parallel()
+
+	repo := lessonIn(t, course.StatusPublished)
+	words := &fakeWords{entries: []vocabulary.Entry{{ID: "w-1", Word: "hello"}, {ID: "w-2", Word: "goodbye"}}}
+
+	detail, err := course.NewService(repo, words).GetLessonDetail(context.Background(), guestViewer, "lesson-1")
+	if err != nil {
+		t.Fatalf("GetLessonDetail() returned error: %v", err)
+	}
+	if words.asked != "lesson-1" {
+		t.Errorf("hỏi từ của bài %q, want lesson-1", words.asked)
+	}
+	if len(detail.Words) != 2 || detail.Words[0].Word != "hello" {
+		t.Errorf("Words = %+v, want đúng hai từ theo thứ tự nguồn trả", detail.Words)
+	}
+}
+
+func TestGetLessonDetailHidesDraftWordsFromLearners(t *testing.T) {
+	t.Parallel()
+
+	repo := lessonIn(t, course.StatusDraft)
+	words := &fakeWords{entries: []vocabulary.Entry{{ID: "w-1"}}}
+
+	_, err := course.NewService(repo, words).GetLessonDetail(context.Background(), guestViewer, "lesson-1")
+	if !errors.Is(err, course.ErrNotFound) {
+		t.Fatalf("error = %v, want ErrNotFound", err)
+	}
+	if words.asked != "" {
+		t.Error("đã đọc từ vựng của một bài mà người này không được thấy")
+	}
+}
+
+func TestGetLessonDetailPropagatesWordsFailure(t *testing.T) {
+	t.Parallel()
+
+	repo := lessonIn(t, course.StatusPublished)
+	boom := errors.New("boom")
+
+	_, err := course.NewService(repo, &fakeWords{err: boom}).GetLessonDetail(context.Background(), guestViewer, "lesson-1")
+	if !errors.Is(err, boom) {
+		t.Fatalf("error = %v, want bọc lỗi gốc", err)
 	}
 }

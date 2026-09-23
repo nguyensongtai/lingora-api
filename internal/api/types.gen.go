@@ -374,6 +374,11 @@ type LessonDetail struct {
 	Summary   string    `json:"summary"`
 	Title     string    `json:"title"`
 	UpdatedAt time.Time `json:"updated_at"`
+
+	// Vocabulary Từ vựng bài này dạy, theo thứ tự của người soạn. Trả cho mọi
+	// người đọc được bài — khác với /me/vocabulary, vốn chỉ gồm từ của
+	// những bài đã học xong.
+	Vocabulary []VocabularyEntry `json:"vocabulary"`
 }
 
 // LessonList defines model for LessonList.

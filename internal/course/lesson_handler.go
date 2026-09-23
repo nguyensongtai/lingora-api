@@ -7,6 +7,7 @@ import (
 
 	"github.com/nguyensongtai/lingora-api/internal/api"
 	"github.com/nguyensongtai/lingora-api/internal/httpx"
+	"github.com/nguyensongtai/lingora-api/internal/vocabulary"
 )
 
 func (h *Handler) createLesson(w http.ResponseWriter, r *http.Request) {
@@ -39,15 +40,16 @@ func (h *Handler) getLesson(w http.ResponseWriter, r *http.Request) {
 
 	lesson := toAPILesson(found.Lesson)
 	httpx.JSON(w, http.StatusOK, api.LessonDetail{
-		Id:        lesson.Id,
-		CourseId:  lesson.CourseId,
-		Slug:      lesson.Slug,
-		Title:     lesson.Title,
-		Summary:   lesson.Summary,
-		Position:  lesson.Position,
-		CreatedAt: lesson.CreatedAt,
-		UpdatedAt: lesson.UpdatedAt,
-		Blocks:    toAPIBlocks(found.Blocks),
+		Id:         lesson.Id,
+		CourseId:   lesson.CourseId,
+		Slug:       lesson.Slug,
+		Title:      lesson.Title,
+		Summary:    lesson.Summary,
+		Position:   lesson.Position,
+		CreatedAt:  lesson.CreatedAt,
+		UpdatedAt:  lesson.UpdatedAt,
+		Blocks:     toAPIBlocks(found.Blocks),
+		Vocabulary: toAPIWords(found.Words),
 	})
 }
 
@@ -78,6 +80,16 @@ func (h *Handler) replaceLessonBlocks(w http.ResponseWriter, r *http.Request) {
 
 // toAPIBlocks giữ slice rỗng thành [] chứ không null: spec khai báo mảng và
 // phía trước lặp thẳng trên nó.
+// toAPIWords luôn trả mảng, kể cả rỗng: spec khai báo mảng bắt buộc và phía
+// trước lặp thẳng trên nó.
+func toAPIWords(words []vocabulary.Entry) []api.VocabularyEntry {
+	items := make([]api.VocabularyEntry, 0, len(words))
+	for _, word := range words {
+		items = append(items, vocabulary.ToAPIEntry(word))
+	}
+	return items
+}
+
 func toAPIBlocks(blocks []Block) []api.LessonBlock {
 	out := make([]api.LessonBlock, 0, len(blocks))
 	for _, block := range blocks {

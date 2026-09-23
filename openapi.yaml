@@ -1450,13 +1450,21 @@ components:
       allOf:
         - $ref: '#/components/schemas/Lesson'
         - type: object
-          required: [blocks]
+          required: [blocks, vocabulary]
           properties:
             blocks:
               type: array
               description: Nội dung bài theo đúng thứ tự hiển thị.
               items:
                 $ref: '#/components/schemas/LessonBlock'
+            vocabulary:
+              type: array
+              description: |
+                Từ vựng bài này dạy, theo thứ tự của người soạn. Trả cho mọi
+                người đọc được bài — khác với /me/vocabulary, vốn chỉ gồm từ của
+                những bài đã học xong.
+              items:
+                $ref: '#/components/schemas/VocabularyEntry'
 
     LessonCreate:
       type: object

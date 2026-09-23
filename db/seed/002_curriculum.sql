@@ -24,8 +24,8 @@ INSERT INTO courses (slug, title, description, level, status) VALUES
      'Họp hành, báo cáo tiến độ, thương lượng và phản hồi đồng nghiệp.', 'B2', 'published'),
     ('hoc-thuat-va-nghien-cuu', 'Học thuật và nghiên cứu',
      'Trích dẫn nguồn, mô tả dữ liệu và nói về giới hạn của nghiên cứu.', 'C1', 'published'),
-    ('sac-thai-va-thanh-ngu', 'Sắc thái và thành ngữ',
-     'Thành ngữ thông dụng, cụm động từ, nói giảm nói tránh.', 'C1', 'published'),
+    ('sac-thai-va-thanh-ngu', 'Sắc thái và mức độ trang trọng',
+     'Tính từ mạnh, động từ trang trọng thay cụm động từ, nói giảm nói tránh.', 'C1', 'published'),
     ('van-phong-va-tu-tu', 'Văn phong và tu từ',
      'Biện pháp tu từ, nhịp điệu câu văn và vốn từ tinh tế.', 'C2', 'published'),
     ('dien-thuyet-va-thuyet-phuc', 'Diễn thuyết và thuyết phục',
@@ -92,9 +92,9 @@ FROM (VALUES
     ('hoc-thuat-va-nghien-cuu', 'gioi-han-nghien-cuu', 'Giới hạn của nghiên cứu', 2),
     ('hoc-thuat-va-nghien-cuu', 'thuat-ngu-hoc-thuat', 'Thuật ngữ học thuật', 3),
 
-    -- C1 · Sắc thái và thành ngữ
-    ('sac-thai-va-thanh-ngu', 'thanh-ngu-thong-dung', 'Thành ngữ thông dụng', 0),
-    ('sac-thai-va-thanh-ngu', 'cum-dong-tu', 'Cụm động từ', 1),
+    -- C1 · Sắc thái và mức độ trang trọng
+    ('sac-thai-va-thanh-ngu', 'thanh-ngu-thong-dung', 'Tính từ mạnh và mức độ', 0),
+    ('sac-thai-va-thanh-ngu', 'cum-dong-tu', 'Động từ trang trọng thay cụm động từ', 1),
     ('sac-thai-va-thanh-ngu', 'noi-giam-noi-tranh', 'Nói giảm nói tránh', 2),
     ('sac-thai-va-thanh-ngu', 'sac-thai-trang-trong', 'Sắc thái trang trọng', 3),
 
@@ -112,6 +112,30 @@ FROM (VALUES
 ) AS v(course_slug, slug, title, position)
 JOIN courses AS c ON c.slug = v.course_slug AND c.deleted_at IS NULL
 ON CONFLICT (course_id, slug) WHERE deleted_at IS NULL DO NOTHING;
+
+/* ---------- chỉnh lại những gì đã nạp ---------- */
+-- Hai câu INSERT ở trên bỏ qua dòng đã có (DO NOTHING), nên sửa tên trong đó chỉ
+-- có tác dụng với database mới. Những sửa đổi dưới đây áp cả lên database đã
+-- seed từ trước. Slug giữ nguyên: nó là khoá để các file seed khác tra tới.
+
+-- Khoá C1 này từng dạy thành ngữ bằng cách lưu chúng dưới dạng một từ (ropes,
+-- backburner, iron…) — dạy sai. Từ vựng đã được thay bằng tính từ mạnh và
+-- động từ trang trọng, nhưng tên khoá và tên bài vẫn hứa dạy thành ngữ và cụm
+-- động từ.
+UPDATE courses SET title = v.title, description = v.description, updated_at = now()
+FROM (VALUES
+    ('sac-thai-va-thanh-ngu', 'Sắc thái và mức độ trang trọng',
+     'Tính từ mạnh, động từ trang trọng thay cụm động từ, nói giảm nói tránh.')
+) AS v(slug, title, description)
+WHERE courses.slug = v.slug AND courses.deleted_at IS NULL
+  AND (courses.title, courses.description) IS DISTINCT FROM (v.title, v.description);
+
+UPDATE lessons SET title = v.title, updated_at = now()
+FROM (VALUES
+    ('thanh-ngu-thong-dung', 'Tính từ mạnh và mức độ'),
+    ('cum-dong-tu', 'Động từ trang trọng thay cụm động từ')
+) AS v(slug, title)
+WHERE lessons.slug = v.slug AND lessons.deleted_at IS NULL AND lessons.title <> v.title;
 
 /* ---------- từ vựng ---------- */
 -- Sáu từ mỗi bài. Câu ví dụ luôn chứa nguyên từ đó: màn Luyện tập khoét chính

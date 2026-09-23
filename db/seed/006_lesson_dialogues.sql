@@ -182,13 +182,13 @@ FROM (VALUES
     ('trich-dan-nguon','Anna','I see. Is a blog a credible source for this assertion?','Em hiểu rồi. Một trang blog có phải là nguồn đáng tin cho nhận định này không ạ?',103),
     ('trich-dan-nguon','Giảng viên','Only if you cannot find a peer-reviewed one. Otherwise it weakens your credibility.','Chỉ khi em không tìm được nguồn đã qua bình duyệt. Nếu không, nó làm giảm độ tin cậy của em.',104),
 
-    -- C1 · Thành ngữ thông dụng
+    -- C1 · Tính từ mạnh và mức độ
     ('thanh-ngu-thong-dung','Linh','How is the marathon training going?','Tập chạy marathon thế nào rồi?',100),
     ('thanh-ngu-thong-dung','Sam','Gruelling. Twenty kilometres every Sunday.','Kiệt sức. Chủ nhật nào cũng hai mươi cây số.',101),
     ('thanh-ngu-thong-dung','Linh','It sounds daunting. I would not even start.','Nghe đã thấy nản. Mình còn chẳng dám bắt đầu.',102),
     ('thanh-ngu-thong-dung','Sam','The running is fine. The stretching afterwards is what I find tedious.','Chạy thì không sao. Giãn cơ sau đó mới là phần mình thấy chán.',103),
 
-    -- C1 · Cụm động từ
+    -- C1 · Động từ trang trọng thay cụm động từ
     ('cum-dong-tu','An','In the email to the ministry, I wrote ''Can you speed up the permit?''','Trong email gửi bộ, mình viết ''Can you speed up the permit?''',100),
     ('cum-dong-tu','Linh','For a ministry, ''expedite'' sounds better: ''Could you expedite the permit?''','Gửi cơ quan nhà nước thì ''expedite'' nghe hợp hơn: ''Could you expedite the permit?''',101),
     ('cum-dong-tu','An','And ''the delay is holding back the project''?','Còn ''the delay is holding back the project''?',102),

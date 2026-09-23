@@ -193,7 +193,8 @@ FROM (VALUES
     ('email-trang-trong','application','/ˌæplɪˈkeɪʃn/','đơn đăng ký','Your application has been received.','Đơn đăng ký của bạn đã được tiếp nhận.',5),
 
     ('email-than-mat','lately','/ˈleɪtli/','dạo này','Have you been busy lately?','Dạo này bạn có bận không?',0),
-    ('email-than-mat','update','/ˈʌpdeɪt/','tin cập nhật','Send me an update when you can.','Khi nào rảnh gửi tôi tin cập nhật nhé.',1),
+    -- update dạy ở nghĩa ĐỘNG TỪ: CEFR-J xếp động từ B1, danh từ ("an update") B2.
+    ('email-than-mat','update','/ʌpˈdeɪt/','cập nhật (cho ai biết tin)','I will update you when I hear from them.','Khi nào có tin từ họ, mình sẽ báo cho bạn.',1),
     ('email-than-mat','suppose','/səˈpoʊz/','đoán chừng','I suppose we could meet on Sunday.','Tôi đoán chừng chủ nhật mình gặp được.',2),
     ('email-than-mat','definitely','/ˈdefɪnətli/','chắc chắn','I will definitely be there.','Tôi chắc chắn sẽ có mặt.',3),
     ('email-than-mat','apology','/əˈpɑːlədʒi/','lời xin lỗi','You owe her an apology.','Bạn nợ cô ấy một lời xin lỗi.',4),

@@ -31,7 +31,7 @@ Redis (chỉ để đếm hạn mức), JWT HS256, bcrypt.
 make up                  # postgres:18 + redis:8 qua docker compose
 cp .env.example .env     # sửa JWT_SECRET
 make migrate-up          # áp dụng migration
-make seed                # giáo trình mẫu: 13 khoá, 52 bài, 292 từ
+make seed                # giáo trình mẫu: 13 khoá, 52 bài, 288 từ, 391 khối nội dung
 make dev                 # http://localhost:8080/healthz
 ```
 
@@ -174,11 +174,20 @@ Phân trang là **keyset** trên `(created_at DESC, id DESC)`, không phải off
 rỗng nghĩa là hết dữ liệu. Chọn keyset vì offset sẽ nhảy hoặc lặp bản ghi khi có
 khoá mới chen vào giữa lúc người dùng đang lật trang.
 
-`GET /lessons/{id}` trả bài kèm **nội dung**: một danh sách khối có thứ tự, mỗi
-khối là `note` (đoạn giải thích tiếng Việt), `example` (câu mẫu Anh–Việt) hoặc
-`dialogue` (như `example`, kèm tên người nói). Mỗi dạng chỉ dùng một phần các
-trường, và ràng buộc `lesson_blocks_shape` trong database bắt đúng phần đó phải
-có còn phần thừa phải rỗng.
+`GET /lessons/{id}` trả bài kèm **nội dung** và **từ vựng của bài**. Nội dung là
+một danh sách khối có thứ tự, mỗi khối là `note` (đoạn giải thích tiếng Việt),
+`example` (câu mẫu Anh–Việt) hoặc `dialogue` (như `example`, kèm tên người nói).
+Mỗi dạng chỉ dùng một phần các trường, và ràng buộc `lesson_blocks_shape` trong
+database bắt đúng phần đó phải có còn phần thừa phải rỗng.
+
+`vocabulary` là những từ bài này dạy, trả cho mọi người đọc được bài — khác với
+`/me/vocabulary`, vốn chỉ gồm từ của bài đã học xong. Trước đây trường này không
+có, nên người học chỉ gặp từ của một bài *sau khi* bấm "Đã xong", ở màn Từ vựng.
+`course.Service` đọc từ vựng qua một interface khai báo phía nó, và chỉ đọc
+**sau** bước kiểm quyền: bài của khoá nháp dừng ở 404 trước khi chạm tới từ.
+
+Màn học chia bài thành bước (Từ vựng → Hội thoại → Cách dùng → Luyện tập) từ
+chính dữ liệu này — API không biết gì về bước, và không có cột nào để giữ đồng bộ.
 
 `PUT /lessons/{id}/blocks` thay **cả danh sách**, giống hai endpoint `order`:
 soạn bài là việc viết lại và kéo thả, nên gửi trọn trạng thái mong muốn đơn
@@ -211,6 +220,7 @@ dài nhất **trong phạm vi được hỏi**, không phải kỷ lục mọi t
 | Method | Route | Quyền |
 | --- | --- | --- |
 | `GET` | `/me/practice/session` | user |
+| `GET` | `/me/practice/session?lesson_id=…` | user |
 | `POST` | `/me/practice/answers` | user |
 
 Câu hỏi **sinh tại chỗ** từ `vocabulary_entries`, không có bảng câu hỏi nào để
@@ -222,6 +232,16 @@ sách nên không cần một lần kiểm quyền thứ hai.
 Chấm điểm **chỉ phạt khi sai**: câu sai đẩy từ về đầu hàng đợi ôn, câu đúng
 không kéo dài khoảng cách. SM-2 dựa trên việc nhớ được sau một quãng nghỉ, nên
 luyện dồn một buổi không được biến một từ vừa gặp thành "thành thạo".
+
+**Luyện trong bài** (`lesson_id` ở cả hai endpoint) là bước cuối của màn học:
+câu hỏi lấy từ đúng những từ của bài đó, **kể cả khi chưa học xong** — đó là lúc
+cần luyện nhất. Nó hỏi hết từ của bài chứ không theo `size`, và **không đụng tới
+lịch ôn**, kể cả khi sai và kể cả khi bài đã xong: đây là lần gặp đầu, không phải
+ôn (người dùng đã chốt như vậy). Quyền đọc bài đi qua `course.Service`, nên bài
+của khoá nháp là 404 với người học y như `GET /lessons/{id}`.
+
+Thiếu `lesson_id` ở `POST /answers` thì câu trả lời bị chấm như ôn tập và câu
+sai bị phạt — phía trước phải gửi đúng phạm vi của lượt đang luyện.
 
 `listen_choose` phải gửi cả chữ của từ xuống để trình duyệt đọc lên, nghĩa là
 đáp án nằm sẵn trong trang — hệ quả không tránh được khi dùng `speechSynthesis`
@@ -459,6 +479,22 @@ phái sinh và phải giữ cùng giấy phép. Nếu sau này cần một giáo
 **Chỉ BẬC là có nguồn.** Phiên âm, nghĩa tiếng Việt và câu ví dụ do Claude soạn
 và **chưa được người có chuyên môn rà soát**. Trước khi có người học thật, phần
 đó cần một vòng biên tập.
+
+## Nội dung bài học
+
+| File | Nội dung |
+| --- | --- |
+| `005_lesson_content.sql` | phần dẫn, ghi chú và câu mẫu của 48 bài; hội thoại của 9 bài |
+| `006_lesson_dialogues.sql` | hội thoại cho 39 bài còn lại (162 lượt); chạy **sau** 005 |
+
+Mỗi bài đã xuất bản đều có đủ bốn bước. Câu mẫu minh hoạ **điểm của ghi chú**,
+không lặp lại câu ví dụ của từ vựng — bản đầu lấy thẳng câu ví dụ của từ (122/132
+câu), nên khi bài chia bước thì bước Cách dùng thành bản sao của bước Từ vựng.
+Màn học giờ tự ẩn câu mẫu trùng như vậy.
+
+**Toàn bộ phần này không có nguồn đối chiếu bằng máy** — khác với bậc CEFR của
+từ vựng. Giải thích ngữ pháp, dựng hội thoại và chọn câu mẫu là việc sư phạm, do
+Claude soạn, và cần người dạy tiếng Anh đọc lại trước khi có người học thật.
 
 ## Công cụ
 

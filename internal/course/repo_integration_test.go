@@ -269,19 +269,22 @@ func TestRepoCoursePositionsAreScopedToTheLevel(t *testing.T) {
 		return created
 	}
 
-	// Bậc A1 đã có khoá sẵn trong database, nên chỉ so tương đối giữa hai khoá
-	// mới tạo chứ không so với một con số tuyệt đối.
+	// Mọi bậc đều có thể đã có khoá sẵn trong database (seed dev nạp đủ cả
+	// sáu), nên chỉ so tương đối chứ không so với một con số tuyệt đối. Bản cũ
+	// giả định C2 trống và đỏ ngay khi chạy trên database đã seed.
+	//
+	// Một khoá A1 chen giữa hai khoá C2 không được đẩy bộ đếm của C2: đó chính
+	// là "bộ đếm tính riêng cho từng bậc".
+	firstC2 := create("vi-tri-c2-mot", course.LevelC2)
 	firstA1 := create("vi-tri-a1-mot", course.LevelA1)
+	secondC2 := create("vi-tri-c2-hai", course.LevelC2)
 	secondA1 := create("vi-tri-a1-hai", course.LevelA1)
+
+	if secondC2.Position != firstC2.Position+1 {
+		t.Errorf("khoá thứ hai của C2 có position %d, want %d", secondC2.Position, firstC2.Position+1)
+	}
 	if secondA1.Position != firstA1.Position+1 {
 		t.Errorf("khoá thứ hai của A1 có position %d, want %d", secondA1.Position, firstA1.Position+1)
-	}
-
-	// Bậc C2 chưa có khoá nào: khoá đầu tiên phải bắt đầu từ 0, tức là bộ đếm
-	// tính riêng cho từng bậc.
-	firstC2 := create("vi-tri-c2-mot", course.LevelC2)
-	if firstC2.Position != 0 {
-		t.Errorf("khoá đầu của C2 có position %d, want 0", firstC2.Position)
 	}
 }
 

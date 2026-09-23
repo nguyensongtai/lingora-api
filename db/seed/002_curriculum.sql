@@ -37,8 +37,8 @@ ON CONFLICT (slug) WHERE deleted_at IS NULL DO NOTHING;
 INSERT INTO lessons (course_id, slug, title, position)
 SELECT c.id, v.slug, v.title, v.position
 FROM (VALUES
-    -- A1 · Ngữ pháp cơ bản (ba bài đầu đã có ở 001)
-    ('ngu-phap-co-ban', 'dong-tu-to-be', 'Động từ to be', 3),
+    -- A1 · Ngữ pháp cơ bản (ba bài còn lại đã có ở 001)
+    ('ngu-phap-co-ban', 'dong-tu-to-be', 'Động từ to be', 0),
 
     -- A1 · Từ vựng đời sống
     ('tu-vung-doi-song', 'gia-dinh-va-ban-be', 'Gia đình và bạn bè', 0),
@@ -136,6 +136,21 @@ FROM (VALUES
     ('cum-dong-tu', 'Động từ trang trọng thay cụm động từ')
 ) AS v(slug, title)
 WHERE lessons.slug = v.slug AND lessons.deleted_at IS NULL AND lessons.title <> v.title;
+
+-- to be đứng đầu khoá ngữ pháp A1 chứ không đứng cuối: nó là động từ dùng
+-- sớm nhất, và bài hiện tại đơn đã dùng nó ("They are often late", trạng từ
+-- đứng sau to be). Thứ tự theo giáo trình vỡ lòng thông thường: to be, mạo từ,
+-- danh từ đếm được, rồi mới tới thì hiện tại đơn.
+UPDATE lessons SET position = v.position, updated_at = now()
+FROM (VALUES
+    ('dong-tu-to-be', 0),
+    ('mao-tu-a-an-the', 1),
+    ('danh-tu-dem-duoc', 2),
+    ('thi-hien-tai-don', 3)
+) AS v(slug, position)
+JOIN courses AS c ON c.slug = 'ngu-phap-co-ban' AND c.deleted_at IS NULL
+WHERE lessons.slug = v.slug AND lessons.course_id = c.id
+  AND lessons.deleted_at IS NULL AND lessons.position <> v.position;
 
 /* ---------- từ vựng ---------- */
 -- Sáu từ mỗi bài. Câu ví dụ luôn chứa nguyên từ đó: màn Luyện tập khoét chính

@@ -20,9 +20,15 @@ SOURCES = ("cefrj-vocabulary-profile-1.5.csv", "octanove-vocabulary-profile-c1c2
 ORDER = ["A1", "A2", "B1", "B2", "C1", "C2"]
 
 
-def load_reference() -> dict[str, str]:
-    """Bậc thấp nhất thắng: từ xuất hiện ở nhiều nơi thì tính là học sớm nhất."""
+def load_reference() -> tuple[dict[str, str], dict[str, dict[str, str]]]:
+    """Bậc thấp nhất thắng: từ xuất hiện ở nhiều nơi thì tính là học sớm nhất.
+
+    Trả kèm bậc theo từng từ loại. Database không lưu từ loại, nên một từ khớp
+    bậc có thể chỉ khớp ở nghĩa KHÁC nghĩa đang dạy: bite từng qua kiểm nhờ
+    danh từ A2 trong khi bài dạy động từ, vốn là B1.
+    """
     ref: dict[str, str] = {}
+    senses: dict[str, dict[str, str]] = {}
     for name in SOURCES:
         # curl thay vì urllib: Python cài từ python.org trên macOS thường
         # thiếu bộ CA và ngã ngay ở bước bắt tay TLS.
@@ -35,10 +41,16 @@ def load_reference() -> dict[str, str]:
             if level not in ORDER:
                 continue
             # Headword có thể gộp biến thể: "a.m./A.M./am/AM".
+            pos = row["pos"].strip()
             for word in (w.strip().lower() for w in row["headword"].split("/")):
-                if word and (word not in ref or ORDER.index(level) < ORDER.index(ref[word])):
+                if not word:
+                    continue
+                if word not in ref or ORDER.index(level) < ORDER.index(ref[word]):
                     ref[word] = level
-    return ref
+                by_pos = senses.setdefault(word, {})
+                if pos not in by_pos or ORDER.index(level) < ORDER.index(by_pos[pos]):
+                    by_pos[pos] = level
+    return ref, senses
 
 
 def load_database() -> list[tuple[str, str, str]]:
@@ -58,7 +70,7 @@ def load_database() -> list[tuple[str, str, str]]:
 
 
 def main() -> int:
-    reference = load_reference()
+    reference, senses = load_reference()
     entries = load_database()
     if not entries:
         print("Không có từ vựng nào trong database. Chạy `make seed` trước.")
@@ -75,6 +87,20 @@ def main() -> int:
     print(f"{len(entries)} từ, {len(entries) - len(problems)} khớp bậc với nguồn.")
     for word, lesson, why in problems:
         print(f"  ✗ {word:<20} bài {lesson:<24} {why}")
+
+    # Không tính là lỗi — máy không biết bài dạy nghĩa nào. Nhưng người soát
+    # phải nhìn nghĩa tiếng Việt và câu ví dụ để chắc bài dạy đúng từ loại này.
+    ambiguous = []
+    for word, level, lesson in entries:
+        by_pos = senses.get(word, {})
+        if len(set(by_pos.values())) > 1:
+            matching = sorted(pos for pos, lv in by_pos.items() if lv == level)
+            ambiguous.append((word, lesson, level, matching, by_pos))
+    if ambiguous:
+        print(f"\n{len(ambiguous)} từ có bậc khác nhau theo từ loại — bài phải dạy đúng nghĩa ghi bên phải:")
+        for word, lesson, level, matching, by_pos in ambiguous:
+            others = ", ".join(f"{pos} {lv}" for pos, lv in sorted(by_pos.items()))
+            print(f"  ? {word:<20} bài {lesson:<24} {level} chỉ đúng khi dạy {'/'.join(matching) or '—'}  ({others})")
     return 1 if problems else 0
 
 

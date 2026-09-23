@@ -31,7 +31,7 @@ Redis (chỉ để đếm hạn mức), JWT HS256, bcrypt.
 make up                  # postgres:18 + redis:8 qua docker compose
 cp .env.example .env     # sửa JWT_SECRET
 make migrate-up          # áp dụng migration
-make seed                # giáo trình mẫu: 13 khoá, 52 bài, 288 từ, 391 khối nội dung
+make seed                # giáo trình mẫu: 13 khoá, 52 bài, 288 từ, 393 khối nội dung
 make dev                 # http://localhost:8080/healthz
 ```
 
@@ -55,6 +55,11 @@ make verify-vocab
 Lệnh này tải hai danh sách nguồn rồi đối chiếu với database, báo mọi từ đặt sai
 bậc. Không có nó thì khẳng định "từ này là B1" chỉ là lời nói suông — không ai
 nhìn bằng mắt mà kiểm được 288 từ.
+
+Nó còn in những từ **có bậc khác nhau theo từ loại**, kèm từ loại làm cho bậc
+đúng. Database không lưu từ loại, nên máy không biết bài dạy nghĩa nào: `bite`
+từng qua kiểm nhờ danh từ A2 trong khi bài dạy động từ (B1). Danh sách đó không
+làm lệnh thất bại, nhưng người soát phải đối chiếu nó với nghĩa tiếng Việt.
 
 Muốn xem màn Tiến độ và Luyện tập ở trạng thái đã có lịch sử thì tạo thêm một
 tài khoản demo rồi nạp tiến độ mẫu cho nó — 24 bài trải trên 30 ngày:
@@ -485,7 +490,7 @@ và **chưa được người có chuyên môn rà soát**. Trước khi có ng�
 | File | Nội dung |
 | --- | --- |
 | `005_lesson_content.sql` | phần dẫn, ghi chú và câu mẫu của 48 bài; hội thoại của 9 bài |
-| `006_lesson_dialogues.sql` | hội thoại cho 39 bài còn lại (162 lượt); chạy **sau** 005 |
+| `006_lesson_dialogues.sql` | hội thoại cho 39 bài còn lại (163 lượt); chạy **sau** 005 |
 
 Mỗi bài đã xuất bản đều có đủ bốn bước. Câu mẫu minh hoạ **điểm của ghi chú**,
 không lặp lại câu ví dụ của từ vựng — bản đầu lấy thẳng câu ví dụ của từ (122/132

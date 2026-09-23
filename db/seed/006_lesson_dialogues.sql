@@ -75,10 +75,11 @@ FROM (VALUES
     ('thi-qua-khu-don','Sam','One did. Nam said sorry, and she accepted his apology.','Có một người. Nam xin lỗi, và bà ấy nhận lời xin lỗi.',103),
 
     -- A2 · Động từ bất quy tắc
-    ('dong-tu-bat-quy-tac','Mai','What happened to your hand?','Tay bạn bị sao thế?',100),
-    ('dong-tu-bat-quy-tac','Tom','I burnt it on the stove when I made dinner.','Mình chạm vào bếp lúc nấu bữa tối nên bị bỏng.',101),
-    ('dong-tu-bat-quy-tac','Mai','And your bike? The wheel looks bent.','Còn xe đạp? Bánh xe trông cong rồi.',102),
-    ('dong-tu-bat-quy-tac','Tom','A dog ran at me and I fell. It nearly bit me!','Một con chó lao vào nên mình ngã. Suýt nữa nó cắn mình!',103),
+    ('dong-tu-bat-quy-tac','Mai','Why are you so late?','Sao bạn đến muộn thế?',100),
+    ('dong-tu-bat-quy-tac','Tom','Someone stole my bike, so I walked.','Có người lấy trộm xe đạp của mình nên mình phải đi bộ.',101),
+    ('dong-tu-bat-quy-tac','Mai','That is terrible. Did you tell the police?','Tệ thật. Bạn báo công an chưa?',102),
+    ('dong-tu-bat-quy-tac','Tom','Yes. I sent them a photo of it. It cost me a lot of money.','Rồi. Mình đã gửi họ ảnh chiếc xe. Mình mua nó đắt lắm.',103),
+    ('dong-tu-bat-quy-tac','Mai','I can lend you mine this week.','Tuần này mình cho bạn mượn xe của mình.',104),
 
     -- A2 · Nói về dự định
     ('noi-ve-du-dinh','Linh','What are you doing after graduation?','Tốt nghiệp xong bạn định làm gì?',100),

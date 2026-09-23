@@ -127,12 +127,15 @@ FROM (VALUES
     ('thi-qua-khu-don','admit','/ədˈmɪt/','thừa nhận','He would not admit his mistake.','Anh ấy không chịu thừa nhận lỗi của mình.',4),
     ('thi-qua-khu-don','accept','/əkˈsept/','chấp nhận','They will accept our offer.','Họ sẽ chấp nhận lời đề nghị của chúng tôi.',5),
 
-    ('dong-tu-bat-quy-tac','bite','/baɪt/','cắn','The dog will not bite you.','Con chó sẽ không cắn bạn đâu.',0),
-    ('dong-tu-bat-quy-tac','bend','/bend/','cúi, uốn cong','Bend your knees slowly.','Từ từ khuỵu đầu gối xuống.',1),
-    ('dong-tu-bat-quy-tac','burn','/bɜːrn/','cháy, làm cháy','Do not burn the rice.','Đừng làm cháy cơm.',2),
-    ('dong-tu-bat-quy-tac','beg','/beɡ/','van xin','He had to beg for more time.','Anh ấy phải van xin thêm thời gian.',3),
-    ('dong-tu-bat-quy-tac','blame','/bleɪm/','đổ lỗi','Do not blame the weather.','Đừng đổ lỗi cho thời tiết.',4),
-    ('dong-tu-bat-quy-tac','bury','/ˈberi/','chôn, vùi','They bury the seeds in spring.','Họ vùi hạt giống vào mùa xuân.',5),
+    -- Sáu động từ CEFR-J xếp A2 ở nghĩa ĐỘNG TỪ, chia theo nhóm biến đổi như
+    -- ghi chú của bài. Bộ cũ (bite, bend, burn, beg, blame, bury) có ba động
+    -- từ có quy tắc, còn bite và burn chỉ là A2 ở nghĩa danh từ.
+    ('dong-tu-bat-quy-tac','cost','/kɔːst/','tốn, có giá (cost – cost)','The ticket cost ten dollars, and it will cost more next year.','Vé giá mười đô, và năm sau sẽ đắt hơn.',0),
+    ('dong-tu-bat-quy-tac','hit','/hɪt/','đánh, va vào (hit – hit)','The ball hit the window, so try not to hit it again.','Quả bóng đập vào cửa sổ, nên cố đừng đập vào nữa.',1),
+    ('dong-tu-bat-quy-tac','send','/send/','gửi (sent – sent)','I sent the file yesterday. Can you send yours today?','Tôi gửi tệp hôm qua rồi. Hôm nay bạn gửi tệp của bạn được không?',2),
+    ('dong-tu-bat-quy-tac','lend','/lend/','cho mượn (lent – lent)','She lent me a book. I can lend it to you next.','Cô ấy cho tôi mượn một cuốn sách. Tiếp theo tôi có thể cho bạn mượn.',3),
+    ('dong-tu-bat-quy-tac','steal','/stiːl/','lấy trộm (stole – stolen)','Someone stole my bike. Thieves often steal bikes here.','Có người lấy trộm xe đạp của tôi. Ở đây trộm hay lấy xe đạp lắm.',4),
+    ('dong-tu-bat-quy-tac','freeze','/friːz/','đóng băng (froze – frozen)','The lake froze last winter, and it may freeze again.','Mùa đông năm ngoái hồ đóng băng, và có thể lại đóng băng nữa.',5),
 
     ('noi-ve-du-dinh','probably','/ˈprɑːbəbli/','có lẽ','She will probably call tonight.','Có lẽ tối nay cô ấy sẽ gọi.',0),
     ('noi-ve-du-dinh','prepare','/prɪˈper/','chuẩn bị','We prepare the report every Friday.','Chúng tôi chuẩn bị báo cáo vào mỗi thứ Sáu.',1),

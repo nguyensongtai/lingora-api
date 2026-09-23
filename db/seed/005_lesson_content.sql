@@ -156,10 +156,11 @@ FROM (VALUES
 
     -- A2 · Động từ bất quy tắc
     ('dong-tu-bat-quy-tac','note','Học động từ bất quy tắc theo NHÓM biến đổi dễ hơn học rời: buy–bought, bring–brought, teach–taught đều đổi thành -ought/-aught.','','','',0),
-    ('dong-tu-bat-quy-tac','note','Một nhóm khác giữ nguyên ở cả ba dạng: cut–cut–cut, put–put–put. Nhóm này không phải học gì thêm.','','','',1),
-    ('dong-tu-bat-quy-tac','example','','I bought some bread and brought it home.','Tôi mua ít bánh mì rồi mang về nhà.','',2),
-    ('dong-tu-bat-quy-tac','example','','She taught English for ten years.','Cô ấy đã dạy tiếng Anh mười năm.','',3),
-    ('dong-tu-bat-quy-tac','example','','He cut his finger yesterday.','Hôm qua anh ấy bị đứt tay.','',4),
+    ('dong-tu-bat-quy-tac','note','Một nhóm giữ nguyên ở cả ba dạng: cut–cut–cut, put–put–put, cost–cost–cost, hit–hit–hit. Nhóm này không phải học gì thêm — chỉ cần nhìn ngữ cảnh để biết đang là quá khứ.','','','',1),
+    ('dong-tu-bat-quy-tac','note','Hai nhóm nữa: đổi đuôi -d thành -t (send–sent, lend–lent, spend–spent), và đổi nguyên âm thành o rồi thêm -en ở dạng thứ ba (steal–stole–stolen, freeze–froze–frozen, speak–spoke–spoken).','','','',2),
+    ('dong-tu-bat-quy-tac','example','','I bought some bread and brought it home.','Tôi mua ít bánh mì rồi mang về nhà.','',3),
+    ('dong-tu-bat-quy-tac','example','','She taught English for ten years.','Cô ấy đã dạy tiếng Anh mười năm.','',4),
+    ('dong-tu-bat-quy-tac','example','','He cut his finger yesterday.','Hôm qua anh ấy bị đứt tay.','',5),
 
     -- A2 · Nói về dự định
     ('noi-ve-du-dinh','note','Ba cách nói tương lai, khác nhau ở mức chắc chắn: will cho quyết định ngay lúc nói, be going to cho dự định đã có sẵn, hiện tại tiếp diễn cho lịch đã chốt.','','','',0),

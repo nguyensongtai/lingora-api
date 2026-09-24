@@ -81,12 +81,6 @@ FROM (VALUES
     ('tieng-anh-cong-so', 'thuong-luong', 'Thương lượng', 2),
     ('tieng-anh-cong-so', 'phan-hoi-dong-nghiep', 'Phản hồi đồng nghiệp', 3),
 
-    -- B2 · Luyện thi IELTS Writing (khoá nháp — vẫn có bài để admin xem)
-    ('luyen-thi-ielts-writing', 'task-1-bieu-do', 'Task 1: mô tả biểu đồ', 0),
-    ('luyen-thi-ielts-writing', 'task-2-cau-truc', 'Task 2: cấu trúc bài', 1),
-    ('luyen-thi-ielts-writing', 'tu-noi-hoc-thuat', 'Từ nối học thuật', 2),
-    ('luyen-thi-ielts-writing', 'loi-thuong-gap', 'Lỗi thường gặp', 3),
-
     -- C1 · Học thuật và nghiên cứu
     ('hoc-thuat-va-nghien-cuu', 'trich-dan-nguon', 'Trích dẫn nguồn', 0),
     ('hoc-thuat-va-nghien-cuu', 'mo-ta-du-lieu', 'Mô tả dữ liệu', 1),

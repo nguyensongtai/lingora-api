@@ -1,5 +1,8 @@
--- Dữ liệu mẫu cho môi trường dev. Chạy lại được nhiều lần.
+-- Hai khoá đầu của giáo trình. Chạy lại được nhiều lần.
 -- Id cố định để mọi máy dev cùng tham chiếu được một bộ dữ liệu.
+--
+-- Nạp cả ở dev lẫn production (make seed-prod). Khoá nháp chỉ để thử màn
+-- admin nằm riêng ở 090_dev_drafts.sql.
 
 INSERT INTO courses (id, slug, title, description, level, status, cover_image_url) VALUES
     (
@@ -18,15 +21,6 @@ INSERT INTO courses (id, slug, title, description, level, status, cover_image_ur
         'Mẫu câu và từ vựng cho các tình huống thường gặp.',
         'A2',
         'published',
-        NULL
-    ),
-    (
-        '01929f00-0000-7000-8000-000000000003',
-        'luyen-thi-ielts-writing',
-        'Luyện thi IELTS Writing',
-        'Task 1 và Task 2: cấu trúc bài, từ vựng học thuật, lỗi thường gặp.',
-        'B2',
-        'draft',
         NULL
     )
 ON CONFLICT (id) DO NOTHING;

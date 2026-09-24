@@ -48,6 +48,21 @@ seed: ## Nạp dữ liệu mẫu cho môi trường dev (cần docker compose up
 	docker compose exec -T postgres psql -U lingora -d lingora -v ON_ERROR_STOP=1 < db/seed/004_vocabulary.sql
 	docker compose exec -T postgres psql -U lingora -d lingora -v ON_ERROR_STOP=1 < db/seed/005_lesson_content.sql
 	docker compose exec -T postgres psql -U lingora -d lingora -v ON_ERROR_STOP=1 < db/seed/006_lesson_dialogues.sql
+	docker compose exec -T postgres psql -U lingora -d lingora -v ON_ERROR_STOP=1 < db/seed/090_dev_drafts.sql
+
+# Giáo trình cho production: không có khoá nháp, không có tài khoản demo.
+# psql chạy trong container postgres:18 nên máy không cần cài psql. Seed ĐÈ nội
+# dung bài (005, 006): chạy lại sau khi admin đã sửa bài là mất phần sửa đó.
+PROD_SEEDS := 001_sample_courses 002_curriculum 004_vocabulary 005_lesson_content 006_lesson_dialogues
+
+.PHONY: seed-prod
+seed-prod: ## Nạp giáo trình vào database production: make seed-prod PROD_DATABASE_URL=...
+	@test -n "$(PROD_DATABASE_URL)" || { echo "Thiếu PROD_DATABASE_URL (Railway: biến DATABASE_PUBLIC_URL của Postgres)."; exit 1; }
+	@read -r -p "Nạp giáo trình vào $$(echo '$(PROD_DATABASE_URL)' | sed -E 's#//[^@]*@#//***@#')? Nội dung bài đang có sẽ bị ghi đè. [y/N] " ok && [ "$$ok" = y ]
+	@for seed in $(PROD_SEEDS); do \
+		echo "→ $$seed"; \
+		docker run --rm -i postgres:18-alpine psql "$(PROD_DATABASE_URL)" -q -v ON_ERROR_STOP=1 < db/seed/$$seed.sql || exit 1; \
+	done
 
 .PHONY: verify-vocab
 verify-vocab: ## Đối chiếu bậc CEFR của từ vựng với dữ liệu nguồn (cần mạng)

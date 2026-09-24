@@ -401,6 +401,25 @@ type LessonOrder struct {
 	LessonIds []string `json:"lesson_ids"`
 }
 
+// LessonPracticeResult defines model for LessonPracticeResult.
+type LessonPracticeResult struct {
+	Correct int `json:"correct"`
+	Total   int `json:"total"`
+}
+
+// LessonPracticeScore defines model for LessonPracticeScore.
+type LessonPracticeScore struct {
+	Attempts    int    `json:"attempts"`
+	BestCorrect int    `json:"best_correct"`
+	LessonId    string `json:"lesson_id"`
+	Total       int    `json:"total"`
+}
+
+// LessonPracticeScoreList defines model for LessonPracticeScoreList.
+type LessonPracticeScoreList struct {
+	Items []LessonPracticeScore `json:"items"`
+}
+
 // LessonUpdate defines model for LessonUpdate.
 type LessonUpdate struct {
 	Slug    *string `json:"slug,omitempty"`
@@ -793,6 +812,9 @@ type ReplaceLessonBlocksJSONRequestBody = LessonBlockList
 
 // CheckPracticeAnswerJSONRequestBody defines body for CheckPracticeAnswer for application/json ContentType.
 type CheckPracticeAnswerJSONRequestBody = PracticeAnswer
+
+// RecordLessonPracticeScoreJSONRequestBody defines body for RecordLessonPracticeScore for application/json ContentType.
+type RecordLessonPracticeScoreJSONRequestBody = LessonPracticeResult
 
 // ReviewVocabularyEntryJSONRequestBody defines body for ReviewVocabularyEntry for application/json ContentType.
 type ReviewVocabularyEntryJSONRequestBody = VocabularyReviewRequest

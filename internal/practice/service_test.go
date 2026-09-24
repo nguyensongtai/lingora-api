@@ -100,8 +100,26 @@ func newService(words *fakeWords) *practice.Service {
 	return newLessonService(words, course.StatusPublished)
 }
 
+// fakeScores ghi lại lần ghi điểm gần nhất.
+type fakeScores struct {
+	recorded *practice.Score
+}
+
+func (f *fakeScores) RecordScore(_ context.Context, _, lessonID string, correct, total int) (practice.Score, error) {
+	f.recorded = &practice.Score{LessonID: lessonID, BestCorrect: correct, Total: total, Attempts: 1}
+	return *f.recorded, nil
+}
+
+func (f *fakeScores) ListScores(context.Context, string) ([]practice.Score, error) {
+	return nil, nil
+}
+
 func newLessonService(words *fakeWords, status course.Status) *practice.Service {
-	return practice.NewService(words, fakeLessons{status: status},
+	return newScoringService(words, status, &fakeScores{})
+}
+
+func newScoringService(words *fakeWords, status course.Status, scores *fakeScores) *practice.Service {
+	return practice.NewService(words, fakeLessons{status: status}, scores,
 		practice.WithShuffle(noShuffle),
 		practice.WithClock(func() time.Time { return time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC) }),
 	)
@@ -730,5 +748,75 @@ func TestListenWriteIsGradedAgainstTheWord(t *testing.T) {
 	}
 	if !result.Correct || result.Expected != "spare" {
 		t.Errorf("result = %+v, want đúng, Expected=spare", result)
+	}
+}
+
+/* ---------- điểm luyện tập trong bài ---------- */
+
+func TestRecordLessonResultKeepsAValidScore(t *testing.T) {
+	t.Parallel()
+
+	scores := &fakeScores{}
+	service := newScoringService(&fakeWords{lessonEntries: lessonWords()}, course.StatusPublished, scores)
+
+	got, err := service.RecordLessonResult(context.Background(), course.Viewer{}, userID, "lesson-1", 5, 6)
+	if err != nil {
+		t.Fatalf("RecordLessonResult() returned error: %v", err)
+	}
+	if scores.recorded == nil || got.BestCorrect != 5 || got.Total != 6 {
+		t.Errorf("ghi = %+v, trả về = %+v, want 5/6", scores.recorded, got)
+	}
+}
+
+// "6/6" phải luôn nghĩa là đã trả lời mọi từ của bài: total khác số câu một
+// lượt của bài là bị từ chối, không ghi gì.
+func TestRecordLessonResultRejectsAResultThatDoesNotFitTheLesson(t *testing.T) {
+	t.Parallel()
+
+	few := map[string][]vocabulary.Entry{"lesson-1": {{ID: "a"}, {ID: "b"}}}
+	cases := map[string]struct {
+		words          map[string][]vocabulary.Entry
+		correct, total int
+		field          string
+	}{
+		"sai số câu":          {lessonWords(), 3, 3, "total"},
+		"đúng nhiều hơn tổng": {lessonWords(), 7, 6, "correct"},
+		"điểm âm":             {lessonWords(), -1, 6, "correct"},
+		"bài không có luyện":  {few, 2, 2, "lesson_id"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			scores := &fakeScores{}
+			service := newScoringService(&fakeWords{lessonEntries: tc.words}, course.StatusPublished, scores)
+
+			_, err := service.RecordLessonResult(context.Background(), course.Viewer{}, userID, "lesson-1", tc.correct, tc.total)
+			var resultErr *practice.ResultError
+			if !errors.As(err, &resultErr) {
+				t.Fatalf("error = %v, want *ResultError", err)
+			}
+			if _, ok := resultErr.Fields[tc.field]; !ok {
+				t.Errorf("Fields = %v, want có key %s", resultErr.Fields, tc.field)
+			}
+			if scores.recorded != nil {
+				t.Error("đã ghi điểm dù kết quả không hợp lệ")
+			}
+		})
+	}
+}
+
+func TestRecordLessonResultHidesDraftLessons(t *testing.T) {
+	t.Parallel()
+
+	scores := &fakeScores{}
+	service := newScoringService(&fakeWords{lessonEntries: lessonWords()}, course.StatusDraft, scores)
+
+	_, err := service.RecordLessonResult(context.Background(), course.Viewer{}, userID, "lesson-1", 6, 6)
+	if !errors.Is(err, course.ErrNotFound) {
+		t.Fatalf("error = %v, want course.ErrNotFound", err)
+	}
+	if scores.recorded != nil {
+		t.Error("đã ghi điểm cho một bài người này không được thấy")
 	}
 }

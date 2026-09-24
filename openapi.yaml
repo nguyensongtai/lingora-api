@@ -667,6 +667,62 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /me/practice/scores:
+    get:
+      tags: [practice]
+      summary: Điểm luyện tập tốt nhất ở mọi bài
+      operationId: listLessonPracticeScores
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Điểm của người đang đăng nhập, bài luyện gần nhất trước
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LessonPracticeScoreList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /me/practice/lessons/{lessonId}/score:
+    put:
+      tags: [practice]
+      summary: Ghi kết quả một lượt luyện trong bài
+      description: |
+        Giữ điểm cao nhất; không cộng XP. `total` phải đúng bằng số câu một
+        lượt của bài (mọi từ của bài, tối đa 30). Số từ của bài đã đổi thì
+        điểm cũ bị thay thay vì so tiếp.
+      operationId: recordLessonPracticeScore
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: lessonId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+            x-go-type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LessonPracticeResult'
+      responses:
+        '200':
+          description: Điểm tốt nhất sau khi ghi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LessonPracticeScore'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /me/progress/history:
     get:
       tags: [progress]
@@ -1674,6 +1730,39 @@ components:
             Có khi câu hỏi đến từ lượt luyện trong bài (session với lesson_id).
             Khi đó câu sai KHÔNG đụng tới lịch ôn: đây là lần gặp đầu, không
             phải ôn.
+
+    LessonPracticeResult:
+      type: object
+      required: [correct, total]
+      properties:
+        correct:
+          type: integer
+        total:
+          type: integer
+
+    LessonPracticeScore:
+      type: object
+      required: [lesson_id, best_correct, total, attempts]
+      properties:
+        lesson_id:
+          type: string
+          format: uuid
+          x-go-type: string
+        best_correct:
+          type: integer
+        total:
+          type: integer
+        attempts:
+          type: integer
+
+    LessonPracticeScoreList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LessonPracticeScore'
 
     PracticeResult:
       type: object

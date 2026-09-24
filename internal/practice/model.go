@@ -89,3 +89,11 @@ const (
 	// MaxOptions là số lựa chọn mong muốn.
 	MaxOptions = 4
 )
+
+// Score là điểm tốt nhất của một người ở bước Luyện tập của một bài.
+type Score struct {
+	LessonID    string
+	BestCorrect int
+	Total       int
+	Attempts    int
+}

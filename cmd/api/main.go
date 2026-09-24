@@ -107,7 +107,7 @@ func run() error {
 	// Luyện tập dựng câu hỏi từ chính vốn từ đã mở khoá, nên nó dùng lại đúng
 	// service từ vựng thay vì hỏi database lần nữa bằng quy tắc chép lại. Luyện
 	// trong bài hỏi course để áp đúng quy tắc ẩn bản nháp.
-	practiceHandler := practice.NewHandler(practice.NewService(vocabularyService, courseService))
+	practiceHandler := practice.NewHandler(practice.NewService(vocabularyService, courseService, practice.NewRepo(pool)))
 
 	router := chi.NewRouter()
 	router.Use(

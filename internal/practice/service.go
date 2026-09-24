@@ -31,10 +31,17 @@ type lessons interface {
 	Get(ctx context.Context, viewer course.Viewer, id string) (course.Course, error)
 }
 
+// scores là nơi lưu điểm luyện tập trong bài.
+type scores interface {
+	RecordScore(ctx context.Context, userID, lessonID string, correct, total int) (Score, error)
+	ListScores(ctx context.Context, userID string) ([]Score, error)
+}
+
 // Service dựng và chấm phiên luyện tập.
 type Service struct {
 	words   words
 	lessons lessons
+	scores  scores
 
 	now func() time.Time
 	// shuffle tách ra để test cố định được thứ tự; mặc định là ngẫu nhiên thật.
@@ -55,8 +62,8 @@ func WithShuffle(shuffle func(n int, swap func(i, j int))) Option {
 	return func(s *Service) { s.shuffle = shuffle }
 }
 
-func NewService(words words, lessons lessons, opts ...Option) *Service {
-	service := &Service{words: words, lessons: lessons, now: time.Now, shuffle: rand.Shuffle}
+func NewService(words words, lessons lessons, scores scores, opts ...Option) *Service {
+	service := &Service{words: words, lessons: lessons, scores: scores, now: time.Now, shuffle: rand.Shuffle}
 	for _, opt := range opts {
 		opt(service)
 	}
@@ -304,6 +311,49 @@ func (s *Service) CheckLesson(ctx context.Context, viewer course.Viewer, lessonI
 		}
 	}
 	return Result{}, fmt.Errorf("check lesson answer %s: %w", entryID, ErrNotFound)
+}
+
+// RecordLessonResult ghi kết quả một lượt luyện trong bài và trả về điểm tốt
+// nhất. Không cộng XP — người dùng đã chốt.
+//
+// Điểm do phía trước đếm và gửi lên: server chấm từng câu nhưng không giữ
+// phiên. Chấp nhận được vì điểm này không đổi ra thứ gì — gian lận chỉ tự
+// dối mình — nhưng total vẫn phải khớp đúng số câu một lượt của bài này, để
+// "6/6" luôn nghĩa là đã trả lời hết mọi từ của bài.
+func (s *Service) RecordLessonResult(ctx context.Context, viewer course.Viewer, userID, lessonID string, correct, total int) (Score, error) {
+	cards, err := s.lessonCards(ctx, viewer, lessonID)
+	if err != nil {
+		return Score{}, err
+	}
+
+	expected := min(len(cards), MaxSessionSize)
+	fields := map[string]string{}
+	switch {
+	case len(cards) < MinOptions:
+		fields["lesson_id"] = "bài này không có bước luyện tập"
+	case total != expected:
+		fields["total"] = fmt.Sprintf("một lượt của bài này có đúng %d câu", expected)
+	case correct < 0 || correct > total:
+		fields["correct"] = "phải nằm trong khoảng từ 0 tới total"
+	}
+	if len(fields) > 0 {
+		return Score{}, &ResultError{Fields: fields}
+	}
+
+	score, err := s.scores.RecordScore(ctx, userID, lessonID, correct, total)
+	if err != nil {
+		return Score{}, fmt.Errorf("record lesson result: %w", err)
+	}
+	return score, nil
+}
+
+// LessonScores trả về điểm tốt nhất của người này ở mọi bài đã luyện.
+func (s *Service) LessonScores(ctx context.Context, userID string) ([]Score, error) {
+	found, err := s.scores.ListScores(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list lesson scores: %w", err)
+	}
+	return found, nil
 }
 
 // lessonCards đọc từ của một bài mà người này được phép đọc. Bài của khoá nháp

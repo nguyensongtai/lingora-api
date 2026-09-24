@@ -224,6 +224,16 @@ type LessonBlock struct {
 	UpdatedAt time.Time
 }
 
+type LessonPracticeScore struct {
+	UserID      pgtype.UUID
+	LessonID    pgtype.UUID
+	BestCorrect int32
+	Total       int32
+	Attempts    int32
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
 type LessonProgress struct {
 	UserID      pgtype.UUID
 	LessonID    pgtype.UUID

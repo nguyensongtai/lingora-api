@@ -43,6 +43,19 @@ func (s *recordingService) LessonSession(_ context.Context, viewer course.Viewer
 	return nil, s.lessonErr
 }
 
+func (s *recordingService) RecordLessonResult(_ context.Context, viewer course.Viewer, _, lessonID string, correct, total int) (practice.Score, error) {
+	s.called, s.viewer, s.lessonID = "RecordLessonResult", viewer, lessonID
+	if s.lessonErr != nil {
+		return practice.Score{}, s.lessonErr
+	}
+	return practice.Score{LessonID: lessonID, BestCorrect: correct, Total: total, Attempts: 2}, nil
+}
+
+func (s *recordingService) LessonScores(context.Context, string) ([]practice.Score, error) {
+	s.called = "LessonScores"
+	return nil, nil
+}
+
 func (s *recordingService) CheckLesson(_ context.Context, viewer course.Viewer, lessonID, _ string, _ practice.Kind, _ string) (practice.Result, error) {
 	s.called, s.viewer, s.lessonID = "CheckLesson", viewer, lessonID
 	return practice.Result{}, s.lessonErr
@@ -161,5 +174,46 @@ func TestLessonPracticeErrorsMapLikeTheLessonItself(t *testing.T) {
 				t.Errorf("status = %d, want %d", recorder.Code, tc.want)
 			}
 		})
+	}
+}
+
+func TestRecordScoreReturnsTheBestScore(t *testing.T) {
+	t.Parallel()
+
+	svc := &recordingService{}
+	recorder := serve(t, svc, http.MethodPut, "/me/practice/lessons/lesson-1/score", `{"correct":4,"total":6}`, "student")
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body: %s)", recorder.Code, recorder.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatalf("body không phải JSON: %v", err)
+	}
+	if body["lesson_id"] != "lesson-1" || body["best_correct"] != float64(4) || body["attempts"] != float64(2) {
+		t.Errorf("body = %v", body)
+	}
+}
+
+func TestRecordScoreReportsWhichFieldIsWrong(t *testing.T) {
+	t.Parallel()
+
+	svc := &recordingService{lessonErr: &practice.ResultError{Fields: map[string]string{"total": "một lượt của bài này có đúng 6 câu"}}}
+	recorder := serve(t, svc, http.MethodPut, "/me/practice/lessons/lesson-1/score", `{"correct":3,"total":3}`, "student")
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", recorder.Code)
+	}
+	if !strings.Contains(recorder.Body.String(), `"total"`) {
+		t.Errorf("body = %s, want details chỉ ra total", recorder.Body.String())
+	}
+}
+
+func TestScoresListIsAnArrayEvenWhenEmpty(t *testing.T) {
+	t.Parallel()
+
+	recorder := serve(t, &recordingService{}, http.MethodGet, "/me/practice/scores", "", "student")
+	if !strings.Contains(recorder.Body.String(), `"items":[]`) {
+		t.Errorf("body = %s, want items là []", recorder.Body.String())
 	}
 }

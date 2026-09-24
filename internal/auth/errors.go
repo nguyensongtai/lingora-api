@@ -31,6 +31,10 @@ var (
 	// ErrGoogleEmailUnverified: Google chưa xác minh email của tài khoản đó.
 	ErrGoogleEmailUnverified = errors.New("auth: google email not verified")
 
+	// ErrNoPassword: tài khoản chỉ đăng nhập bằng Google, không có mật khẩu
+	// nào để đổi.
+	ErrNoPassword = errors.New("auth: account has no password")
+
 	// ErrRateLimited: thử quá nhiều lần trong một khoảng thời gian ngắn. Dùng
 	// errors.As với *RateLimitedError để lấy thời gian phải chờ.
 	ErrRateLimited = errors.New("auth: too many attempts")

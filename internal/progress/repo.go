@@ -147,6 +147,20 @@ func (r *Repo) CompletedCount(ctx context.Context, userID string) (int64, error)
 	return total, nil
 }
 
+// DailyGoal đọc mục tiêu XP mỗi ngày người học đã chọn ở trang tài khoản.
+func (r *Repo) DailyGoal(ctx context.Context, userID string) (int64, error) {
+	id, err := parseID(userID)
+	if err != nil {
+		return 0, err
+	}
+
+	goal, err := r.q.GetUserDailyGoal(ctx, id)
+	if err != nil {
+		return 0, fmt.Errorf("read daily goal of %s: %w", userID, err)
+	}
+	return int64(goal), nil
+}
+
 func parseID(raw string) (pgtype.UUID, error) {
 	id, err := postgres.ParseUUID(raw)
 	if err != nil {

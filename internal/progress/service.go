@@ -19,6 +19,7 @@ type repository interface {
 	Snapshot(ctx context.Context, userID string) (Snapshot, error)
 	DailyActivity(ctx context.Context, userID string) ([]DayActivity, error)
 	CompletedCount(ctx context.Context, userID string) (int64, error)
+	DailyGoal(ctx context.Context, userID string) (int64, error)
 }
 
 // lessons là cửa duy nhất Service nhìn sang gói course: chỉ cần biết một bài
@@ -92,8 +93,13 @@ func (s *Service) Snapshot(ctx context.Context, userID string) (Snapshot, error)
 		return Snapshot{}, fmt.Errorf("read progress: %w", err)
 	}
 
+	goal, err := s.repo.DailyGoal(ctx, userID)
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("read progress: %w", err)
+	}
+
 	today := s.today()
-	found.GoalXP = DefaultGoalXP
+	found.GoalXP = goal
 	found.XPPerLesson = XPPerLesson
 	found.TodayXP = completionsOn(days, today) * XPPerLesson
 	found.StreakDays = streakEndingAt(days, today)
@@ -111,6 +117,11 @@ func (s *Service) History(ctx context.Context, userID string, days int64) (Histo
 	}
 
 	total, err := s.repo.CompletedCount(ctx, userID)
+	if err != nil {
+		return History{}, fmt.Errorf("read history: %w", err)
+	}
+
+	goal, err := s.repo.DailyGoal(ctx, userID)
 	if err != nil {
 		return History{}, fmt.Errorf("read history: %w", err)
 	}
@@ -134,7 +145,7 @@ func (s *Service) History(ctx context.Context, userID string, days int64) (Histo
 		CurrentStreak: streakEndingAt(activity, today),
 		LongestStreak: longestStreak(series),
 		XPPerLesson:   XPPerLesson,
-		GoalXP:        DefaultGoalXP,
+		GoalXP:        goal,
 	}, nil
 }
 

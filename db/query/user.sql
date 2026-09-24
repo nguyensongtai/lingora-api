@@ -28,3 +28,19 @@ WHERE lower(email) = lower(sqlc.arg('email')) AND deleted_at IS NULL;
 -- name: GetUserByID :one
 SELECT * FROM users
 WHERE id = sqlc.arg('id') AND deleted_at IS NULL;
+
+-- name: UpdateUserProfile :one
+-- Partial update: NULL nghĩa là giữ nguyên.
+UPDATE users
+SET display_name  = COALESCE(sqlc.narg('display_name'), display_name),
+    daily_goal_xp = COALESCE(sqlc.narg('daily_goal_xp'), daily_goal_xp),
+    updated_at    = now()
+WHERE id = sqlc.arg('id') AND deleted_at IS NULL
+RETURNING *;
+
+-- name: UpdateUserPassword :execrows
+-- Chỉ đổi được mật khẩu của tài khoản vốn đã có mật khẩu: tài khoản chỉ có
+-- Google đặt mật khẩu lần đầu là một luồng khác, chưa làm.
+UPDATE users
+SET password_hash = sqlc.arg('password_hash'), updated_at = now()
+WHERE id = sqlc.arg('id') AND password_hash IS NOT NULL AND deleted_at IS NULL;

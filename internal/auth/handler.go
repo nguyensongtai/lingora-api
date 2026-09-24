@@ -24,6 +24,8 @@ type service interface {
 	Refresh(ctx context.Context, refreshToken string) (TokenPair, error)
 	Logout(ctx context.Context, refreshToken string) error
 	CurrentUser(ctx context.Context, userID string) (user.User, error)
+	UpdateProfile(ctx context.Context, userID string, displayName *string, dailyGoalXP *int) (user.User, error)
+	ChangePassword(ctx context.Context, userID, current, next string) (TokenPair, error)
 }
 
 // LoginIPRule giới hạn số lần gọi các route xác thực từ một địa chỉ IP.
@@ -64,7 +66,12 @@ func (h *Handler) Mount(r chi.Router, authenticated func(http.Handler) http.Hand
 
 		r.Post("/refresh", h.refresh)
 		r.Post("/logout", h.logout)
-		r.With(authenticated).Get("/me", h.me)
+		r.Group(func(r chi.Router) {
+			r.Use(authenticated)
+			r.Get("/me", h.me)
+			r.Patch("/me", h.updateMe)
+			r.Put("/me/password", h.changePassword)
+		})
 	})
 }
 
@@ -170,6 +177,59 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, toAPIUser(account))
 }
 
+func (h *Handler) updateMe(w http.ResponseWriter, r *http.Request) {
+	claims, ok := ClaimsFrom(r.Context())
+	if !ok {
+		slog.ErrorContext(r.Context(), "claims missing behind the auth middleware")
+		httpx.Error(w, http.StatusInternalServerError, httpx.CodeInternal, "Có lỗi xảy ra, vui lòng thử lại.", nil)
+		return
+	}
+
+	var body api.UpdateMeRequest
+	if err := httpx.DecodeJSON(w, r, &body); err != nil {
+		writeMalformed(w, err)
+		return
+	}
+
+	// Enum trong spec sinh ra kiểu riêng; giá trị ngoài enum không bị bộ giải
+	// mã chặn, nên service vẫn là nơi kiểm.
+	var goal *int
+	if body.DailyGoalXp != nil {
+		value := int(*body.DailyGoalXp)
+		goal = &value
+	}
+	updated, err := h.service.UpdateProfile(r.Context(), claims.Subject, body.DisplayName, goal)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toAPIUser(updated))
+}
+
+// changePassword trả về một cặp token mới: mọi phiên cũ vừa bị thu hồi, kể
+// cả phiên đang gọi, nên phía trước phải thay cookie bằng cặp này.
+func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
+	claims, ok := ClaimsFrom(r.Context())
+	if !ok {
+		slog.ErrorContext(r.Context(), "claims missing behind the auth middleware")
+		httpx.Error(w, http.StatusInternalServerError, httpx.CodeInternal, "Có lỗi xảy ra, vui lòng thử lại.", nil)
+		return
+	}
+
+	var body api.ChangePasswordRequest
+	if err := httpx.DecodeJSON(w, r, &body); err != nil {
+		writeMalformed(w, err)
+		return
+	}
+
+	pair, err := h.service.ChangePassword(r.Context(), claims.Subject, body.CurrentPassword, body.NewPassword)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toAPITokenPair(pair))
+}
+
 func decodeRefreshRequest(w http.ResponseWriter, r *http.Request) (api.RefreshRequest, bool) {
 	var body api.RefreshRequest
 	if err := httpx.DecodeJSON(w, r, &body); err != nil {
@@ -191,6 +251,8 @@ func toAPIUser(account user.User) api.User {
 		Email:       account.Email,
 		DisplayName: account.DisplayName,
 		Role:        api.UserRole(account.Role),
+		DailyGoalXp: api.UserDailyGoalXp(account.DailyGoalXP),
+		HasPassword: account.HasPassword(),
 		CreatedAt:   account.CreatedAt,
 	}
 }
@@ -222,6 +284,8 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		httpx.WriteRateLimited(w, rateLimitedErr.RetryAfter)
 	case errors.As(err, &validationErr):
 		httpx.Error(w, http.StatusBadRequest, httpx.CodeValidation, "Dữ liệu không hợp lệ.", validationErr.Fields)
+	case errors.Is(err, ErrNoPassword):
+		httpx.Error(w, http.StatusConflict, httpx.CodeConflict, "Tài khoản này đăng nhập bằng Google nên chưa có mật khẩu để đổi.", nil)
 	case errors.Is(err, ErrGoogleNotConfigured):
 		httpx.Error(w, http.StatusServiceUnavailable, httpx.CodeInternal, "Đăng nhập bằng Google chưa được bật.", nil)
 	case errors.Is(err, ErrGoogleEmailUnverified):

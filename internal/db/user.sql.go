@@ -20,7 +20,7 @@ VALUES (
     $4,
     $5
 )
-RETURNING id, email, password_hash, display_name, role, created_at, updated_at, deleted_at, google_sub
+RETURNING id, email, password_hash, display_name, role, created_at, updated_at, deleted_at, google_sub, daily_goal_xp
 `
 
 type CreateUserParams struct {
@@ -50,12 +50,13 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.GoogleSub,
+		&i.DailyGoalXp,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, display_name, role, created_at, updated_at, deleted_at, google_sub FROM users
+SELECT id, email, password_hash, display_name, role, created_at, updated_at, deleted_at, google_sub, daily_goal_xp FROM users
 WHERE lower(email) = lower($1) AND deleted_at IS NULL
 `
 
@@ -72,12 +73,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.GoogleSub,
+		&i.DailyGoalXp,
 	)
 	return i, err
 }
 
 const getUserByGoogleSub = `-- name: GetUserByGoogleSub :one
-SELECT id, email, password_hash, display_name, role, created_at, updated_at, deleted_at, google_sub FROM users
+SELECT id, email, password_hash, display_name, role, created_at, updated_at, deleted_at, google_sub, daily_goal_xp FROM users
 WHERE google_sub = $1 AND deleted_at IS NULL
 `
 
@@ -94,12 +96,13 @@ func (q *Queries) GetUserByGoogleSub(ctx context.Context, googleSub *string) (Us
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.GoogleSub,
+		&i.DailyGoalXp,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, display_name, role, created_at, updated_at, deleted_at, google_sub FROM users
+SELECT id, email, password_hash, display_name, role, created_at, updated_at, deleted_at, google_sub, daily_goal_xp FROM users
 WHERE id = $1 AND deleted_at IS NULL
 `
 
@@ -116,6 +119,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.GoogleSub,
+		&i.DailyGoalXp,
 	)
 	return i, err
 }
@@ -124,7 +128,7 @@ const linkGoogleSub = `-- name: LinkGoogleSub :one
 UPDATE users
 SET google_sub = $1, updated_at = now()
 WHERE id = $2 AND google_sub IS NULL AND deleted_at IS NULL
-RETURNING id, email, password_hash, display_name, role, created_at, updated_at, deleted_at, google_sub
+RETURNING id, email, password_hash, display_name, role, created_at, updated_at, deleted_at, google_sub, daily_goal_xp
 `
 
 type LinkGoogleSubParams struct {
@@ -147,6 +151,62 @@ func (q *Queries) LinkGoogleSub(ctx context.Context, arg LinkGoogleSubParams) (U
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.GoogleSub,
+		&i.DailyGoalXp,
+	)
+	return i, err
+}
+
+const updateUserPassword = `-- name: UpdateUserPassword :execrows
+UPDATE users
+SET password_hash = $1, updated_at = now()
+WHERE id = $2 AND password_hash IS NOT NULL AND deleted_at IS NULL
+`
+
+type UpdateUserPasswordParams struct {
+	PasswordHash *string
+	ID           pgtype.UUID
+}
+
+// Chỉ đổi được mật khẩu của tài khoản vốn đã có mật khẩu: tài khoản chỉ có
+// Google đặt mật khẩu lần đầu là một luồng khác, chưa làm.
+func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateUserPassword, arg.PasswordHash, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateUserProfile = `-- name: UpdateUserProfile :one
+UPDATE users
+SET display_name  = COALESCE($1, display_name),
+    daily_goal_xp = COALESCE($2, daily_goal_xp),
+    updated_at    = now()
+WHERE id = $3 AND deleted_at IS NULL
+RETURNING id, email, password_hash, display_name, role, created_at, updated_at, deleted_at, google_sub, daily_goal_xp
+`
+
+type UpdateUserProfileParams struct {
+	DisplayName *string
+	DailyGoalXp *int32
+	ID          pgtype.UUID
+}
+
+// Partial update: NULL nghĩa là giữ nguyên.
+func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserProfile, arg.DisplayName, arg.DailyGoalXp, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.DisplayName,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.GoogleSub,
+		&i.DailyGoalXp,
 	)
 	return i, err
 }

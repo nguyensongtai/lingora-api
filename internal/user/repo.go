@@ -107,6 +107,53 @@ func (r *Repo) GetByID(ctx context.Context, id string) (User, error) {
 	return toUser(row), nil
 }
 
+// UpdateProfile đổi tên hiển thị và/hoặc mục tiêu XP.
+func (r *Repo) UpdateProfile(ctx context.Context, id string, params ProfileParams) (User, error) {
+	userID, err := postgres.ParseUUID(id)
+	if err != nil {
+		return User{}, fmt.Errorf("%w: %q", ErrInvalidID, id)
+	}
+
+	var goal *int32
+	if params.DailyGoalXP != nil {
+		value := int32(*params.DailyGoalXP)
+		goal = &value
+	}
+	row, err := r.q.UpdateUserProfile(ctx, db.UpdateUserProfileParams{
+		ID:          userID,
+		DisplayName: params.DisplayName,
+		DailyGoalXp: goal,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return User{}, fmt.Errorf("update profile %s: %w", id, ErrNotFound)
+		}
+		return User{}, fmt.Errorf("update profile %s: %w", id, err)
+	}
+	return toUser(row), nil
+}
+
+// UpdatePassword thay hash mật khẩu. Tài khoản không có mật khẩu (chỉ Google)
+// không có hàng nào khớp, và trả ErrNotFound.
+func (r *Repo) UpdatePassword(ctx context.Context, id, passwordHash string) error {
+	userID, err := postgres.ParseUUID(id)
+	if err != nil {
+		return fmt.Errorf("%w: %q", ErrInvalidID, id)
+	}
+
+	affected, err := r.q.UpdateUserPassword(ctx, db.UpdateUserPasswordParams{
+		ID:           userID,
+		PasswordHash: &passwordHash,
+	})
+	if err != nil {
+		return fmt.Errorf("update password %s: %w", id, err)
+	}
+	if affected == 0 {
+		return fmt.Errorf("update password %s: %w", id, ErrNotFound)
+	}
+	return nil
+}
+
 func isUniqueViolation(err error, constraint string) bool {
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) {
@@ -123,6 +170,7 @@ func toUser(row db.User) User {
 		DisplayName:  row.DisplayName,
 		Role:         Role(row.Role),
 		GoogleSub:    row.GoogleSub,
+		DailyGoalXP:  int(row.DailyGoalXp),
 		CreatedAt:    row.CreatedAt,
 		UpdatedAt:    row.UpdatedAt,
 	}

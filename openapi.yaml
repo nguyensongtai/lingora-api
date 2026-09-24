@@ -189,6 +189,67 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [auth]
+      summary: Sửa hồ sơ của chính mình
+      operationId: updateCurrentUser
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMeRequest'
+      responses:
+        '200':
+          description: Hồ sơ sau khi sửa
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/me/password:
+    put:
+      tags: [auth]
+      summary: Đổi mật khẩu
+      description: |
+        Kiểm mật khẩu hiện tại (tối đa 5 lần sai mỗi 15 phút), đổi mật khẩu,
+        rồi thu hồi MỌI phiên — kể cả phiên đang gọi — và trả về một cặp token
+        mới cho chính thiết bị này. Mật khẩu hiện tại sai là 400 theo field
+        `current_password`, không phải 401: phiên vẫn còn hợp lệ.
+      operationId: changePassword
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Cặp token mới
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Tài khoản chỉ đăng nhập bằng Google, không có mật khẩu để đổi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 
   /courses:
     get:
@@ -1062,7 +1123,7 @@ components:
 
     User:
       type: object
-      required: [id, email, display_name, role, created_at]
+      required: [id, email, display_name, role, daily_goal_xp, has_password, created_at]
       properties:
         id:
           type: string
@@ -1076,9 +1137,37 @@ components:
           type: string
         role:
           $ref: '#/components/schemas/UserRole'
+        daily_goal_xp:
+          type: integer
+          enum: [20, 50, 100]
+          description: Mục tiêu XP mỗi ngày.
+        has_password:
+          type: boolean
+          description: false với tài khoản chỉ đăng nhập bằng Google — không có mật khẩu để đổi.
         created_at:
           type: string
           format: date-time
+
+    UpdateMeRequest:
+      type: object
+      minProperties: 1
+      properties:
+        display_name:
+          type: string
+          maxLength: 100
+        daily_goal_xp:
+          type: integer
+          enum: [20, 50, 100]
+
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+        new_password:
+          type: string
+          minLength: 12
 
     RegisterRequest:
       type: object

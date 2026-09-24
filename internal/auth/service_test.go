@@ -18,6 +18,21 @@ type fakeUsers struct {
 	byID       func(context.Context, string) (user.User, error)
 	byGoogle   func(context.Context, string) (user.User, error)
 	linkGoogle func(context.Context, string, string) (user.User, error)
+	profile    func(context.Context, string, user.ProfileParams) (user.User, error)
+	// passwordSet ghi lại hash mới nhất được lưu.
+	passwordSet string
+}
+
+func (f *fakeUsers) UpdateProfile(ctx context.Context, id string, params user.ProfileParams) (user.User, error) {
+	if f.profile == nil {
+		f.t.Fatal("UpdateProfile called unexpectedly")
+	}
+	return f.profile(ctx, id, params)
+}
+
+func (f *fakeUsers) UpdatePassword(_ context.Context, _ string, passwordHash string) error {
+	f.passwordSet = passwordHash
+	return nil
 }
 
 func (f *fakeUsers) GetByGoogleSub(ctx context.Context, googleSub string) (user.User, error) {
@@ -58,9 +73,20 @@ func (f *fakeUsers) GetByID(ctx context.Context, id string) (user.User, error) {
 type fakeSessions struct {
 	t *testing.T
 
-	created []string
-	revoked [][]byte
-	active  map[string]auth.Session
+	created    []string
+	revoked    [][]byte
+	revokedAll []string
+	active     map[string]auth.Session
+}
+
+func (f *fakeSessions) RevokeAllForUser(_ context.Context, userID string) error {
+	f.revokedAll = append(f.revokedAll, userID)
+	for hash, session := range f.active {
+		if session.UserID == userID {
+			delete(f.active, hash)
+		}
+	}
+	return nil
 }
 
 func newFakeSessions(t *testing.T) *fakeSessions {

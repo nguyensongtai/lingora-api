@@ -28,6 +28,15 @@ var LoginEmailRule = ratelimit.Rule{
 	Window: 15 * time.Minute,
 }
 
+// PasswordChangeRule giới hạn số lần thử mật khẩu cũ khi đổi mật khẩu. Ô "mật
+// khẩu hiện tại" cũng là một cửa dò mật khẩu — cho kẻ cầm được một phiên đang
+// mở trên máy người khác.
+var PasswordChangeRule = ratelimit.Rule{
+	Name:   "password-change",
+	Limit:  5,
+	Window: 15 * time.Minute,
+}
+
 // refreshTokenBytes là độ dài entropy của refresh token trước khi mã hoá base64.
 const refreshTokenBytes = 32
 
@@ -38,6 +47,8 @@ type users interface {
 	GetByID(ctx context.Context, id string) (user.User, error)
 	GetByGoogleSub(ctx context.Context, googleSub string) (user.User, error)
 	LinkGoogle(ctx context.Context, id, googleSub string) (user.User, error)
+	UpdateProfile(ctx context.Context, id string, params user.ProfileParams) (user.User, error)
+	UpdatePassword(ctx context.Context, id, passwordHash string) error
 }
 
 // googleExchanger đổi authorization code lấy danh tính. Khai báo ở phía
@@ -51,6 +62,7 @@ type sessions interface {
 	Create(ctx context.Context, userID string, tokenHash []byte, expiresAt time.Time) (Session, error)
 	GetActive(ctx context.Context, tokenHash []byte) (Session, error)
 	Revoke(ctx context.Context, tokenHash []byte) error
+	RevokeAllForUser(ctx context.Context, userID string) error
 }
 
 // TokenPair là kết quả của một lần đăng nhập hoặc làm mới phiên.
@@ -323,6 +335,101 @@ func (s *Service) CurrentUser(ctx context.Context, userID string) (user.User, er
 		return user.User{}, fmt.Errorf("current user: %w", err)
 	}
 	return found, nil
+}
+
+// UpdateProfile đổi tên hiển thị và/hoặc mục tiêu XP mỗi ngày.
+func (s *Service) UpdateProfile(ctx context.Context, userID string, displayName *string, dailyGoalXP *int) (user.User, error) {
+	var v validationBuilder
+	if displayName == nil && dailyGoalXP == nil {
+		v.add("body", "cần ít nhất một trong display_name, daily_goal_xp")
+	}
+	if displayName != nil {
+		trimmed := strings.TrimSpace(*displayName)
+		displayName = &trimmed
+		switch {
+		case trimmed == "":
+			v.add("display_name", "không được để trống")
+		case utf8.RuneCountInString(trimmed) > maxDisplayNameLen:
+			v.add("display_name", fmt.Sprintf("tối đa %d ký tự", maxDisplayNameLen))
+		}
+	}
+	if dailyGoalXP != nil && !user.ValidDailyGoal(*dailyGoalXP) {
+		v.add("daily_goal_xp", fmt.Sprintf("phải là một trong %v", user.DailyGoals))
+	}
+	if err := v.err(); err != nil {
+		return user.User{}, err
+	}
+
+	updated, err := s.users.UpdateProfile(ctx, userID, user.ProfileParams{
+		DisplayName: displayName,
+		DailyGoalXP: dailyGoalXP,
+	})
+	if err != nil {
+		return user.User{}, fmt.Errorf("update profile: %w", err)
+	}
+	updated.PasswordHash = nil
+	return updated, nil
+}
+
+// ChangePassword đổi mật khẩu rồi đăng xuất mọi phiên, kể cả phiên đang dùng,
+// và cấp lại một phiên mới cho chính thiết bị này.
+//
+// Đăng xuất các phiên khác là lý do chính người ta đổi mật khẩu: nghi có người
+// khác đang dùng tài khoản. Chỉ đổi hash mà để các refresh token cũ sống tiếp
+// thì kẻ đó vẫn ở lại tới khi phiên hết hạn.
+func (s *Service) ChangePassword(ctx context.Context, userID, current, next string) (TokenPair, error) {
+	limitKey := PasswordChangeRule.Key(userID)
+	decision, err := s.limiter.Allow(ctx, limitKey, PasswordChangeRule.Limit, PasswordChangeRule.Window)
+	if err != nil {
+		return TokenPair{}, fmt.Errorf("change password: %w", err)
+	}
+	if !decision.Allowed {
+		return TokenPair{}, &RateLimitedError{RetryAfter: decision.RetryAfter}
+	}
+
+	var v validationBuilder
+	if len([]rune(next)) < MinPasswordLen {
+		v.add("new_password", fmt.Sprintf("cần ít nhất %d ký tự", MinPasswordLen))
+	} else if next == current {
+		v.add("new_password", "phải khác mật khẩu hiện tại")
+	}
+	if err := v.err(); err != nil {
+		return TokenPair{}, err
+	}
+
+	account, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return TokenPair{}, fmt.Errorf("change password: %w", err)
+	}
+	if !account.HasPassword() {
+		return TokenPair{}, ErrNoPassword
+	}
+	if err := VerifyPassword(*account.PasswordHash, current); err != nil {
+		if errors.Is(err, ErrInvalidCredentials) {
+			// 400 theo field chứ không phải 401: phiên vẫn hợp lệ, chỉ ô mật
+			// khẩu cũ là sai. 401 sẽ khiến phía trước tưởng phiên đã hết hạn.
+			var wrong validationBuilder
+			wrong.add("current_password", "không đúng")
+			return TokenPair{}, wrong.err()
+		}
+		return TokenPair{}, fmt.Errorf("change password: %w", err)
+	}
+
+	hash, err := HashPassword(next)
+	if err != nil {
+		return TokenPair{}, fmt.Errorf("change password: %w", err)
+	}
+	if err := s.users.UpdatePassword(ctx, userID, hash); err != nil {
+		return TokenPair{}, fmt.Errorf("change password: %w", err)
+	}
+	if err := s.sessions.RevokeAllForUser(ctx, userID); err != nil {
+		return TokenPair{}, fmt.Errorf("change password: %w", err)
+	}
+	if err := s.limiter.Reset(ctx, limitKey); err != nil {
+		slog.WarnContext(ctx, "reset password change rate limit", slog.Any("error", err))
+	}
+
+	return s.issue(ctx, account)
 }
 
 func (s *Service) issue(ctx context.Context, account user.User) (TokenPair, error) {

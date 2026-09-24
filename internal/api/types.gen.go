@@ -142,6 +142,48 @@ func (e PracticeKind) Valid() bool {
 	}
 }
 
+// Defines values for UpdateMeRequestDailyGoalXp.
+const (
+	UpdateMeRequestDailyGoalXpN100 UpdateMeRequestDailyGoalXp = 100
+	UpdateMeRequestDailyGoalXpN20  UpdateMeRequestDailyGoalXp = 20
+	UpdateMeRequestDailyGoalXpN50  UpdateMeRequestDailyGoalXp = 50
+)
+
+// Valid indicates whether the value is a known member of the UpdateMeRequestDailyGoalXp enum.
+func (e UpdateMeRequestDailyGoalXp) Valid() bool {
+	switch e {
+	case UpdateMeRequestDailyGoalXpN100:
+		return true
+	case UpdateMeRequestDailyGoalXpN20:
+		return true
+	case UpdateMeRequestDailyGoalXpN50:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UserDailyGoalXp.
+const (
+	UserDailyGoalXpN100 UserDailyGoalXp = 100
+	UserDailyGoalXpN20  UserDailyGoalXp = 20
+	UserDailyGoalXpN50  UserDailyGoalXp = 50
+)
+
+// Valid indicates whether the value is a known member of the UserDailyGoalXp enum.
+func (e UserDailyGoalXp) Valid() bool {
+	switch e {
+	case UserDailyGoalXpN100:
+		return true
+	case UserDailyGoalXpN20:
+		return true
+	case UserDailyGoalXpN50:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UserRole.
 const (
 	Admin   UserRole = "admin"
@@ -200,6 +242,12 @@ func (e VocabularyState) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// ChangePasswordRequest defines model for ChangePasswordRequest.
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
 }
 
 // Course defines model for Course.
@@ -589,14 +637,32 @@ type TokenPair struct {
 	User         User   `json:"user"`
 }
 
+// UpdateMeRequest defines model for UpdateMeRequest.
+type UpdateMeRequest struct {
+	DailyGoalXp *UpdateMeRequestDailyGoalXp `json:"daily_goal_xp,omitempty"`
+	DisplayName *string                     `json:"display_name,omitempty"`
+}
+
+// UpdateMeRequestDailyGoalXp defines model for UpdateMeRequest.DailyGoalXp.
+type UpdateMeRequestDailyGoalXp int
+
 // User defines model for User.
 type User struct {
-	CreatedAt   time.Time `json:"created_at"`
-	DisplayName string    `json:"display_name"`
-	Email       string    `json:"email"`
-	Id          string    `json:"id"`
-	Role        UserRole  `json:"role"`
+	CreatedAt time.Time `json:"created_at"`
+
+	// DailyGoalXp Mục tiêu XP mỗi ngày.
+	DailyGoalXp UserDailyGoalXp `json:"daily_goal_xp"`
+	DisplayName string          `json:"display_name"`
+	Email       string          `json:"email"`
+
+	// HasPassword false với tài khoản chỉ đăng nhập bằng Google — không có mật khẩu để đổi.
+	HasPassword bool     `json:"has_password"`
+	Id          string   `json:"id"`
+	Role        UserRole `json:"role"`
 }
+
+// UserDailyGoalXp Mục tiêu XP mỗi ngày.
+type UserDailyGoalXp int
 
 // UserRole defines model for UserRole.
 type UserRole string
@@ -782,6 +848,12 @@ type LoginJSONRequestBody = LoginRequest
 
 // LogoutJSONRequestBody defines body for Logout for application/json ContentType.
 type LogoutJSONRequestBody = RefreshRequest
+
+// UpdateCurrentUserJSONRequestBody defines body for UpdateCurrentUser for application/json ContentType.
+type UpdateCurrentUserJSONRequestBody = UpdateMeRequest
+
+// ChangePasswordJSONRequestBody defines body for ChangePassword for application/json ContentType.
+type ChangePasswordJSONRequestBody = ChangePasswordRequest
 
 // RefreshSessionJSONRequestBody defines body for RefreshSession for application/json ContentType.
 type RefreshSessionJSONRequestBody = RefreshRequest

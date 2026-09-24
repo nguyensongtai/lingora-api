@@ -46,6 +46,15 @@ type fakeRepo struct {
 	snapshotFn   func(ctx context.Context, userID string) (progress.Snapshot, error)
 	dailyFn      func(ctx context.Context, userID string) ([]progress.DayActivity, error)
 	countFn      func(ctx context.Context, userID string) (int64, error)
+	// goal là mục tiêu XP mỗi ngày; 0 nghĩa là dùng 50 như mặc định của cột.
+	goal int64
+}
+
+func (f *fakeRepo) DailyGoal(context.Context, string) (int64, error) {
+	if f.goal == 0 {
+		return 50, nil
+	}
+	return f.goal, nil
 }
 
 func (f *fakeRepo) CompletedCount(ctx context.Context, userID string) (int64, error) {
@@ -259,8 +268,28 @@ func TestSnapshotDerivesTodayXP(t *testing.T) {
 	if want := 3 * progress.XPPerLesson; got.TodayXP != want {
 		t.Errorf("TodayXP = %d, want %d", got.TodayXP, want)
 	}
-	if got.GoalXP != progress.DefaultGoalXP {
-		t.Errorf("GoalXP = %d, want %d", got.GoalXP, progress.DefaultGoalXP)
+	if got.GoalXP != 50 {
+		t.Errorf("GoalXP = %d, want 50 (mặc định của cột)", got.GoalXP)
+	}
+}
+
+// Mục tiêu là của từng người, chọn ở trang tài khoản — không còn là hằng số.
+func TestSnapshotAndHistoryUseTheLearnersOwnGoal(t *testing.T) {
+	t.Parallel()
+
+	repo := &fakeRepo{goal: 100}
+	service := progress.NewService(repo, aliveLessons(), fixedToday(t, "2026-09-21"))
+
+	snapshot, err := service.Snapshot(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("Snapshot() returned error: %v", err)
+	}
+	history, err := service.History(context.Background(), userID, 30)
+	if err != nil {
+		t.Fatalf("History() returned error: %v", err)
+	}
+	if snapshot.GoalXP != 100 || history.GoalXP != 100 {
+		t.Errorf("GoalXP = %d / %d, want 100 ở cả hai", snapshot.GoalXP, history.GoalXP)
 	}
 }
 

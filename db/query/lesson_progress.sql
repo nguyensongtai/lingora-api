@@ -77,3 +77,8 @@ JOIN courses AS c ON c.id = l.course_id
 WHERE p.user_id = sqlc.arg('user_id')
   AND l.deleted_at IS NULL
   AND c.deleted_at IS NULL;
+
+-- name: GetUserDailyGoal :one
+-- Mục tiêu XP mỗi ngày của một người, cho thanh mục tiêu của tiến độ.
+SELECT daily_goal_xp FROM users
+WHERE id = sqlc.arg('user_id') AND deleted_at IS NULL;

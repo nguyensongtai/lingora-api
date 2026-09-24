@@ -259,6 +259,7 @@ type User struct {
 	UpdatedAt    time.Time
 	DeletedAt    *time.Time
 	GoogleSub    *string
+	DailyGoalXp  int32
 }
 
 type VocabularyEntry struct {

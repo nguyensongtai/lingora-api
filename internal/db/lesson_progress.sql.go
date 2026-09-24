@@ -49,6 +49,19 @@ func (q *Queries) CountCompletedLessons(ctx context.Context, userID pgtype.UUID)
 	return column_1, err
 }
 
+const getUserDailyGoal = `-- name: GetUserDailyGoal :one
+SELECT daily_goal_xp FROM users
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+// Mục tiêu XP mỗi ngày của một người, cho thanh mục tiêu của tiến độ.
+func (q *Queries) GetUserDailyGoal(ctx context.Context, userID pgtype.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, getUserDailyGoal, userID)
+	var daily_goal_xp int32
+	err := row.Scan(&daily_goal_xp)
+	return daily_goal_xp, err
+}
+
 const latestCompletedCourse = `-- name: LatestCompletedCourse :one
 SELECT l.course_id
 FROM lesson_progress AS p

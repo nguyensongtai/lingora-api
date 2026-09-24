@@ -32,8 +32,31 @@ type User struct {
 	DisplayName  string
 	Role         Role
 	GoogleSub    *string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	// DailyGoalXP là mục tiêu XP mỗi ngày, một trong DailyGoals.
+	DailyGoalXP int
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+// DailyGoals là ba mức mục tiêu XP mỗi ngày được chọn — khớp CHECK
+// users_daily_goal_xp_allowed.
+var DailyGoals = [...]int{20, 50, 100}
+
+// ValidDailyGoal cho biết một mức có nằm trong DailyGoals hay không.
+func ValidDailyGoal(xp int) bool {
+	for _, goal := range DailyGoals {
+		if goal == xp {
+			return true
+		}
+	}
+	return false
+}
+
+// ProfileParams là partial update hồ sơ; nil nghĩa là giữ nguyên. Giá trị đã
+// được validate ở tầng trên.
+type ProfileParams struct {
+	DisplayName *string
+	DailyGoalXP *int
 }
 
 // HasPassword cho biết tài khoản có đăng nhập bằng mật khẩu được hay không.

@@ -67,11 +67,6 @@ const (
 // bài học nữa".
 const XPPerLesson int64 = 20
 
-// DefaultGoalXP là mục tiêu mỗi ngày, mặc định trong design. Chưa có màn cài
-// đặt nên tạm là hằng số chung; khi nào cho người dùng đổi thì nó thành một cột
-// của users.
-const DefaultGoalXP int64 = 50
-
 // StreakLocation là múi giờ dùng để cắt ngày. Cố định theo Việt Nam chứ không
 // theo giờ máy chủ hay giờ trình duyệt: một chuỗi ngày học phải giữ nguyên dù
 // người dùng đi công tác hay máy chủ đổi vùng.

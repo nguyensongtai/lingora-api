@@ -259,3 +259,73 @@ func shortName(t *testing.T) string {
 	}
 	return string(name)
 }
+
+// Trần từ mới lấy những từ chưa ôn đứng đầu danh sách, nên danh sách phải xếp
+// theo thứ tự người học đã học chúng — bài xong trước đứng trước — chứ không
+// theo lúc người soạn tạo từ.
+func TestRepoNewWordsFollowTheOrderLessonsWereCompleted(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	ctx := context.Background()
+
+	// Từ của bài "đã học" được tạo trước, nhưng bài kia lại xong sớm hơn.
+	first := f.addWord(t, f.doneLesson, "alpha")
+	second := f.addWord(t, f.doneLesson, "beta")
+	earlier := f.addWord(t, f.lockedLesson, "gamma")
+	if err := f.progress.Complete(ctx, f.userID, f.lockedLesson); err != nil {
+		t.Fatalf("Complete() returned error: %v", err)
+	}
+	if _, err := f.tx.Exec(ctx,
+		`UPDATE lesson_progress SET completed_at = now() - interval '1 day'
+		 WHERE user_id = $1 AND lesson_id = $2`, f.userID, f.lockedLesson); err != nil {
+		t.Fatalf("lùi mốc hoàn thành: %v", err)
+	}
+
+	cards, err := f.vocab.ListForUser(ctx, f.userID)
+	if err != nil {
+		t.Fatalf("ListForUser() returned error: %v", err)
+	}
+
+	got := make([]string, 0, len(cards))
+	for _, card := range cards {
+		got = append(got, card.ID)
+	}
+	want := []string{earlier.ID, first.ID, second.ID}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+		t.Errorf("thứ tự = %v, want gamma (bài xong trước), rồi alpha, beta theo vị trí trong bài", got)
+	}
+}
+
+func TestRepoCountIntroducedSinceCountsFirstReviews(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	ctx := context.Background()
+	today := time.Date(2026, 9, 24, 0, 0, 0, 0, vocabulary.ReviewLocation)
+
+	for _, word := range []string{"one", "two"} {
+		entry := f.addWord(t, f.doneLesson, word)
+		if _, err := f.vocab.SaveReview(ctx, f.userID, entry.ID, vocabulary.Review{
+			EaseFactor: 2.5, IntervalDays: 1, Repetitions: 1, DueOn: today.AddDate(0, 0, 1),
+		}); err != nil {
+			t.Fatalf("SaveReview() returned error: %v", err)
+		}
+	}
+
+	// created_at là now() của transaction, nên một mốc trước đó đếm được cả
+	// hai, còn một mốc sau đó thì không đếm được gì.
+	var now time.Time
+	if err := f.tx.QueryRow(ctx, "SELECT now()").Scan(&now); err != nil {
+		t.Fatalf("đọc now(): %v", err)
+	}
+	for since, want := range map[time.Time]int64{now.Add(-time.Hour): 2, now.Add(time.Hour): 0} {
+		got, err := f.vocab.CountIntroducedSince(ctx, f.userID, since)
+		if err != nil {
+			t.Fatalf("CountIntroducedSince() returned error: %v", err)
+		}
+		if got != want {
+			t.Errorf("CountIntroducedSince(%s) = %d, want %d", since, got, want)
+		}
+	}
+}

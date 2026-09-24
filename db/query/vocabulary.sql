@@ -60,9 +60,12 @@ WHERE e.deleted_at IS NULL
   AND l.deleted_at IS NULL
   AND c.deleted_at IS NULL
 ORDER BY
-    -- Chưa ôn lần nào đứng trước, rồi tới hạn cũ nhất.
+    -- Chưa ôn lần nào đứng trước, rồi tới hạn cũ nhất. Từ chưa ôn xếp theo
+    -- thứ tự người học đã học chúng — bài xong trước, rồi thứ tự trong bài —
+    -- vì trần từ mới mỗi ngày cho vào hàng đợi đúng những từ đứng đầu.
     r.due_on NULLS FIRST,
-    e.created_at,
+    p.completed_at,
+    e.position,
     e.id;
 
 -- name: GetVocabularyReview :one
@@ -96,6 +99,12 @@ RETURNING *;
 SELECT count(*)::bigint FROM vocabulary_reviews
 WHERE user_id = sqlc.arg('user_id')
   AND created_at >= now() - interval '7 days';
+
+-- name: CountVocabularyIntroducedSince :one
+-- Số từ được ôn lần đầu kể từ một mốc — tức là số từ mới đã vào hàng đợi.
+SELECT count(*)::bigint FROM vocabulary_reviews
+WHERE user_id = sqlc.arg('user_id')
+  AND created_at >= sqlc.arg('since');
 
 -- name: VocabularyEntryUnlocked :one
 -- Từ chỉ ôn được khi người học đã đánh dấu hoàn thành bài chứa nó. Kiểm bằng

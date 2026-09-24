@@ -28,12 +28,10 @@ type service interface {
 // Handler ánh xạ HTTP sang nghiệp vụ từ vựng.
 type Handler struct {
 	service service
-	// today dùng để tính state trả về; cùng nguồn thời gian với service.
-	now func() time.Time
 }
 
 func NewHandler(svc service) *Handler {
-	return &Handler{service: svc, now: time.Now}
+	return &Handler{service: svc}
 }
 
 // Mount gắn hai nhánh: /vocabulary là công cụ soạn nội dung (toàn bộ cần
@@ -155,13 +153,12 @@ func (h *Handler) listMine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	today := h.today()
 	items := make([]api.VocabularyCard, 0, len(cards))
 	for _, card := range cards {
 		items = append(items, api.VocabularyCard{
 			Entry:       ToAPIEntry(card.Entry),
 			Level:       api.CourseLevel(card.Level),
-			State:       api.VocabularyState(card.StateOn(today)),
+			State:       api.VocabularyState(card.State),
 			Familiarity: card.Familiarity(),
 			Review:      toAPIReview(card.Review),
 		})
@@ -186,6 +183,7 @@ func (h *Handler) stats(w http.ResponseWriter, r *http.Request) {
 		DueToday:    stats.DueToday,
 		Mastered:    stats.Mastered,
 		NewThisWeek: stats.NewThisWeek,
+		Waiting:     stats.Waiting,
 	})
 }
 
@@ -211,22 +209,17 @@ func (h *Handler) review(w http.ResponseWriter, r *http.Request) {
 
 /* ---------- ánh xạ ---------- */
 
-func (h *Handler) today() time.Time {
-	at := h.now().In(ReviewLocation)
-	return time.Date(at.Year(), at.Month(), at.Day(), 0, 0, 0, 0, ReviewLocation)
-}
-
 func parseState(raw string) (*State, error) {
 	if raw == "" {
 		return nil, nil
 	}
 	switch State(raw) {
-	case StateDue, StateLearning, StateMastered:
+	case StateDue, StateLearning, StateMastered, StateWaiting:
 		state := State(raw)
 		return &state, nil
 	default:
 		var v validationBuilder
-		v.add("state", `phải là "due", "learning" hoặc "mastered"`)
+		v.add("state", `phải là "due", "learning", "mastered" hoặc "waiting"`)
 		return nil, v.err()
 	}
 }

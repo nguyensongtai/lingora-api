@@ -183,6 +183,7 @@ const (
 	Due      VocabularyState = "due"
 	Learning VocabularyState = "learning"
 	Mastered VocabularyState = "mastered"
+	Waiting  VocabularyState = "waiting"
 )
 
 // Valid indicates whether the value is a known member of the VocabularyState enum.
@@ -193,6 +194,8 @@ func (e VocabularyState) Valid() bool {
 	case Learning:
 		return true
 	case Mastered:
+		return true
+	case Waiting:
 		return true
 	default:
 		return false
@@ -592,8 +595,10 @@ type VocabularyCard struct {
 	// Review `null` khi người học chưa ôn từ này lần nào.
 	Review *VocabularyReview `json:"review"`
 
-	// State `due` đến hạn ôn (kể cả từ chưa ôn lần nào), `learning` đang học,
-	// `mastered` khoảng cách ôn đã từ 21 ngày trở lên.
+	// State `due` đến hạn ôn, `learning` đang học, `mastered` khoảng cách ôn đã từ
+	// 21 ngày trở lên, `waiting` từ mới chưa tới lượt. Mỗi ngày tối đa 20 từ
+	// chưa ôn lần nào được vào nhóm `due`; phần còn lại là `waiting` và lần
+	// lượt vào hàng đợi những ngày sau, theo thứ tự đã học.
 	State VocabularyState `json:"state"`
 }
 
@@ -657,8 +662,10 @@ type VocabularyReviewRequest struct {
 // VocabularyReviewRequestGrade defines model for VocabularyReviewRequest.Grade.
 type VocabularyReviewRequestGrade string
 
-// VocabularyState `due` đến hạn ôn (kể cả từ chưa ôn lần nào), `learning` đang học,
-// `mastered` khoảng cách ôn đã từ 21 ngày trở lên.
+// VocabularyState `due` đến hạn ôn, `learning` đang học, `mastered` khoảng cách ôn đã từ
+// 21 ngày trở lên, `waiting` từ mới chưa tới lượt. Mỗi ngày tối đa 20 từ
+// chưa ôn lần nào được vào nhóm `due`; phần còn lại là `waiting` và lần
+// lượt vào hàng đợi những ngày sau, theo thứ tự đã học.
 type VocabularyState string
 
 // VocabularyStats defines model for VocabularyStats.
@@ -667,6 +674,9 @@ type VocabularyStats struct {
 	Learned     int64 `json:"learned"`
 	Mastered    int64 `json:"mastered"`
 	NewThisWeek int64 `json:"new_this_week"`
+
+	// Waiting Từ mới đã mở khoá nhưng vượt trần 20 từ mới của hôm nay.
+	Waiting int64 `json:"waiting"`
 }
 
 // CourseId defines model for CourseId.

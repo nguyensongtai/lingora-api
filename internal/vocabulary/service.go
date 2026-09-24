@@ -28,6 +28,7 @@ type repository interface {
 	SaveReview(ctx context.Context, userID, entryID string, review Review) (Review, error)
 	Unlocked(ctx context.Context, userID, entryID string) (bool, error)
 	CountNewThisWeek(ctx context.Context, userID string) (int64, error)
+	CountIntroducedSince(ctx context.Context, userID string, since time.Time) (int64, error)
 }
 
 // lessons là cửa duy nhất Service nhìn sang gói course.
@@ -134,9 +135,10 @@ func (s *Service) Delete(ctx context.Context, entryID string) error {
 
 /* ---------- phía người học ---------- */
 
-// List trả về từ đã mở khoá của một người, lọc theo nhóm nếu có.
+// List trả về từ đã mở khoá của một người, lọc theo nhóm nếu có. Mỗi thẻ
+// mang sẵn State.
 func (s *Service) List(ctx context.Context, userID string, state *State) ([]Card, error) {
-	cards, err := s.repo.ListForUser(ctx, userID)
+	cards, err := s.classified(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list vocabulary: %w", err)
 	}
@@ -144,19 +146,18 @@ func (s *Service) List(ctx context.Context, userID string, state *State) ([]Card
 		return cards, nil
 	}
 
-	today := s.today()
 	filtered := make([]Card, 0, len(cards))
 	for _, card := range cards {
-		if card.StateOn(today) == *state {
+		if card.State == *state {
 			filtered = append(filtered, card)
 		}
 	}
 	return filtered, nil
 }
 
-// Stats đếm bốn ô trên đầu màn Từ vựng.
+// Stats đếm các ô trên đầu màn Từ vựng.
 func (s *Service) Stats(ctx context.Context, userID string) (Stats, error) {
-	cards, err := s.repo.ListForUser(ctx, userID)
+	cards, err := s.classified(ctx, userID)
 	if err != nil {
 		return Stats{}, fmt.Errorf("read vocabulary stats: %w", err)
 	}
@@ -166,18 +167,55 @@ func (s *Service) Stats(ctx context.Context, userID string) (Stats, error) {
 		return Stats{}, fmt.Errorf("read vocabulary stats: %w", err)
 	}
 
-	today := s.today()
 	stats := Stats{Learned: int64(len(cards)), NewThisWeek: newThisWeek}
 	for _, card := range cards {
-		switch card.StateOn(today) {
+		switch card.State {
 		case StateDue:
 			stats.DueToday++
 		case StateMastered:
 			stats.Mastered++
+		case StateWaiting:
+			stats.Waiting++
 		case StateLearning:
 		}
 	}
 	return stats, nil
+}
+
+// classified đọc từ đã mở khoá và điền State cho từng thẻ.
+//
+// Từ đã ôn thì theo lịch SM-2 của nó. Từ chưa ôn lần nào chỉ "đến hạn" khi
+// trần từ mới hôm nay còn chỗ; hết chỗ thì "đang chờ". Chỗ đã dùng đếm theo
+// số từ được ôn lần đầu từ đầu ngày, nên ôn xong một từ mới thì nó rời nhóm
+// chưa ôn và không chiếm thêm chỗ nào — trần là 20 từ mỗi ngày, không phải
+// 20 từ mỗi lần mở màn hình.
+func (s *Service) classified(ctx context.Context, userID string) ([]Card, error) {
+	cards, err := s.repo.ListForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	today := s.today()
+	introduced, err := s.repo.CountIntroducedSince(ctx, userID, today)
+	if err != nil {
+		return nil, err
+	}
+
+	// Repo đã xếp từ chưa ôn theo thứ tự học, nên chỗ trống rơi vào đúng
+	// những từ học trước.
+	budget := max(NewWordsPerDay-introduced, 0)
+	for i := range cards {
+		switch {
+		case cards[i].Review != nil:
+			cards[i].State = cards[i].StateOn(today)
+		case budget > 0:
+			cards[i].State = StateDue
+			budget--
+		default:
+			cards[i].State = StateWaiting
+		}
+	}
+	return cards, nil
 }
 
 // Review ghi nhận một lần ôn và trả về lịch mới.

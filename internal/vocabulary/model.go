@@ -33,6 +33,10 @@ type Card struct {
 	// Level là bậc CEFR của khoá chứa bài, tiện cho phía trước khỏi tra thêm.
 	Level  string
 	Review *Review
+	// State do Service.List điền. Nó không suy ra được từ riêng một thẻ: từ
+	// chưa ôn lần nào là "đến hạn" hay "đang chờ" tuỳ trần từ mới hôm nay còn
+	// bao nhiêu chỗ.
+	State State
 }
 
 // State là ba nhóm trong design: đến hạn, đang học, thành thạo.
@@ -42,7 +46,15 @@ const (
 	StateDue      State = "due"
 	StateLearning State = "learning"
 	StateMastered State = "mastered"
+	// StateWaiting là từ mới đã mở khoá nhưng vượt trần từ mới của hôm nay.
+	// Nó không mất: sang ngày sau sẽ lần lượt vào hàng đợi.
+	StateWaiting State = "waiting"
 )
+
+// NewWordsPerDay là số từ mới tối đa vào hàng đợi ôn mỗi ngày — mặc định của
+// Anki, người dùng đã chốt. Không có trần thì học xong ba khoá trong một buổi
+// là sáng hôm sau có hơn trăm từ đến hạn cùng lúc.
+const NewWordsPerDay int64 = 20
 
 // MasteredIntervalDays là mốc coi một từ đã thành thạo. 21 ngày là ngưỡng quen
 // thuộc của các bộ SRS dựa trên SM-2.
@@ -98,4 +110,6 @@ type Stats struct {
 	DueToday    int64
 	Mastered    int64
 	NewThisWeek int64
+	// Waiting là số từ mới đang chờ tới lượt vào hàng đợi.
+	Waiting int64
 }

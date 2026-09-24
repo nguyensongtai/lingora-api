@@ -12,6 +12,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countVocabularyIntroducedSince = `-- name: CountVocabularyIntroducedSince :one
+SELECT count(*)::bigint FROM vocabulary_reviews
+WHERE user_id = $1
+  AND created_at >= $2
+`
+
+type CountVocabularyIntroducedSinceParams struct {
+	UserID pgtype.UUID
+	Since  time.Time
+}
+
+// Số từ được ôn lần đầu kể từ một mốc — tức là số từ mới đã vào hàng đợi.
+func (q *Queries) CountVocabularyIntroducedSince(ctx context.Context, arg CountVocabularyIntroducedSinceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countVocabularyIntroducedSince, arg.UserID, arg.Since)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countVocabularyLearnedThisWeek = `-- name: CountVocabularyLearnedThisWeek :one
 SELECT count(*)::bigint FROM vocabulary_reviews
 WHERE user_id = $1
@@ -185,9 +204,12 @@ WHERE e.deleted_at IS NULL
   AND l.deleted_at IS NULL
   AND c.deleted_at IS NULL
 ORDER BY
-    -- Chưa ôn lần nào đứng trước, rồi tới hạn cũ nhất.
+    -- Chưa ôn lần nào đứng trước, rồi tới hạn cũ nhất. Từ chưa ôn xếp theo
+    -- thứ tự người học đã học chúng — bài xong trước, rồi thứ tự trong bài —
+    -- vì trần từ mới mỗi ngày cho vào hàng đợi đúng những từ đứng đầu.
     r.due_on NULLS FIRST,
-    e.created_at,
+    p.completed_at,
+    e.position,
     e.id
 `
 

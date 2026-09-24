@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -204,6 +205,23 @@ func (r *Repo) SaveReview(ctx context.Context, userID, entryID string, review Re
 		DueOn:          row.DueOn.Time,
 		LastReviewedAt: row.LastReviewedAt,
 	}, nil
+}
+
+// CountIntroducedSince đếm số từ được ôn lần đầu kể từ since.
+func (r *Repo) CountIntroducedSince(ctx context.Context, userID string, since time.Time) (int64, error) {
+	id, err := parseID(userID)
+	if err != nil {
+		return 0, err
+	}
+
+	count, err := r.q.CountVocabularyIntroducedSince(ctx, db.CountVocabularyIntroducedSinceParams{
+		UserID: id,
+		Since:  since,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count introduced vocabulary of %s: %w", userID, err)
+	}
+	return count, nil
 }
 
 // CountNewThisWeek đếm số từ được ôn lần đầu trong bảy ngày qua.

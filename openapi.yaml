@@ -1055,9 +1055,11 @@ components:
     VocabularyState:
       type: string
       description: |
-        `due` đến hạn ôn (kể cả từ chưa ôn lần nào), `learning` đang học,
-        `mastered` khoảng cách ôn đã từ 21 ngày trở lên.
-      enum: [due, learning, mastered]
+        `due` đến hạn ôn, `learning` đang học, `mastered` khoảng cách ôn đã từ
+        21 ngày trở lên, `waiting` từ mới chưa tới lượt. Mỗi ngày tối đa 20 từ
+        chưa ôn lần nào được vào nhóm `due`; phần còn lại là `waiting` và lần
+        lượt vào hàng đợi những ngày sau, theo thứ tự đã học.
+      enum: [due, learning, mastered, waiting]
 
     VocabularyEntry:
       type: object
@@ -1202,7 +1204,7 @@ components:
 
     VocabularyStats:
       type: object
-      required: [learned, due_today, mastered, new_this_week]
+      required: [learned, due_today, mastered, new_this_week, waiting]
       properties:
         learned:
           type: integer
@@ -1216,6 +1218,10 @@ components:
         new_this_week:
           type: integer
           format: int64
+        waiting:
+          type: integer
+          format: int64
+          description: Từ mới đã mở khoá nhưng vượt trần 20 từ mới của hôm nay.
 
     VocabularyReviewRequest:
       type: object

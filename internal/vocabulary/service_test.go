@@ -3,6 +3,7 @@ package vocabulary_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -23,6 +24,9 @@ type fakeRepo struct {
 	cards       []vocabulary.Card
 	unlocked    bool
 	newThisWeek int64
+	// introduced là số từ đã được ôn lần đầu hôm nay; since ghi lại mốc hỏi.
+	introduced int64
+	since      time.Time
 
 	saved *vocabulary.Review
 }
@@ -66,6 +70,11 @@ func (f *fakeRepo) Unlocked(context.Context, string, string) (bool, error) {
 
 func (f *fakeRepo) CountNewThisWeek(context.Context, string) (int64, error) {
 	return f.newThisWeek, nil
+}
+
+func (f *fakeRepo) CountIntroducedSince(_ context.Context, _ string, since time.Time) (int64, error) {
+	f.since = since
+	return f.introduced, nil
 }
 
 type fakeLessons struct {
@@ -256,5 +265,96 @@ func TestListFiltersByState(t *testing.T) {
 
 	if len(got) != 1 || got[0].ID != "1" {
 		t.Errorf("List(due) = %+v, want đúng từ chưa ôn lần nào", got)
+	}
+}
+
+/* ---------- trần từ mới mỗi ngày ---------- */
+
+// newCards dựng n từ chưa ôn lần nào, theo đúng thứ tự repo trả về.
+func newCards(n int) []vocabulary.Card {
+	cards := make([]vocabulary.Card, n)
+	for i := range cards {
+		cards[i] = vocabulary.Card{Entry: vocabulary.Entry{ID: fmt.Sprintf("new-%02d", i)}}
+	}
+	return cards
+}
+
+func statesOf(cards []vocabulary.Card) map[vocabulary.State]int {
+	counts := map[vocabulary.State]int{}
+	for _, card := range cards {
+		counts[card.State]++
+	}
+	return counts
+}
+
+func TestOnlyTwentyNewWordsADayReachTheQueue(t *testing.T) {
+	t.Parallel()
+
+	repo := &fakeRepo{t: t, cards: newCards(25)}
+
+	got, err := service(t, repo, &fakeLessons{}, "2026-09-24").List(context.Background(), userID, nil)
+	if err != nil {
+		t.Fatalf("List() returned error: %v", err)
+	}
+
+	counts := statesOf(got)
+	if counts[vocabulary.StateDue] != 20 || counts[vocabulary.StateWaiting] != 5 {
+		t.Errorf("states = %v, want 20 due + 5 waiting", counts)
+	}
+	// Chỗ trống rơi vào những từ học trước — thứ tự repo trả về.
+	if got[19].State != vocabulary.StateDue || got[20].State != vocabulary.StateWaiting {
+		t.Errorf("từ thứ 20 = %s, từ thứ 21 = %s, want due rồi waiting", got[19].State, got[20].State)
+	}
+}
+
+func TestWordsIntroducedTodayUseUpTheAllowance(t *testing.T) {
+	t.Parallel()
+
+	for introduced, wantDue := range map[int64]int{0: 20, 18: 2, 20: 0, 27: 0} {
+		repo := &fakeRepo{t: t, cards: newCards(25), introduced: introduced}
+
+		got, err := service(t, repo, &fakeLessons{}, "2026-09-24").List(context.Background(), userID, nil)
+		if err != nil {
+			t.Fatalf("List() returned error: %v", err)
+		}
+		if due := statesOf(got)[vocabulary.StateDue]; due != wantDue {
+			t.Errorf("đã giới thiệu %d từ hôm nay: due = %d, want %d", introduced, due, wantDue)
+		}
+	}
+}
+
+// "Hôm nay" cắt theo giờ Việt Nam: 15 giờ ngày 24 giờ VN thì mốc là 0 giờ ngày
+// 24 giờ VN, tức 17 giờ ngày 23 UTC.
+func TestTheAllowanceResetsAtVietnameseMidnight(t *testing.T) {
+	t.Parallel()
+
+	repo := &fakeRepo{t: t, cards: newCards(1)}
+	if _, err := service(t, repo, &fakeLessons{}, "2026-09-24").List(context.Background(), userID, nil); err != nil {
+		t.Fatalf("List() returned error: %v", err)
+	}
+
+	want := time.Date(2026, 9, 23, 17, 0, 0, 0, time.UTC)
+	if !repo.since.Equal(want) {
+		t.Errorf("since = %s, want %s", repo.since.UTC(), want)
+	}
+}
+
+// Trần chỉ áp cho từ CHƯA ôn: từ đang ôn dở đến hạn thì vẫn đến hạn.
+func TestTheAllowanceNeverHoldsBackWordsAlreadyUnderReview(t *testing.T) {
+	t.Parallel()
+
+	today := day(t, "2026-09-24")
+	cards := []vocabulary.Card{
+		{Entry: vocabulary.Entry{ID: "old"}, Review: &vocabulary.Review{IntervalDays: 3, DueOn: today}},
+	}
+	cards = append(cards, newCards(2)...)
+	repo := &fakeRepo{t: t, cards: cards, introduced: 20}
+
+	stats, err := service(t, repo, &fakeLessons{}, "2026-09-24").Stats(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("Stats() returned error: %v", err)
+	}
+	if stats.DueToday != 1 || stats.Waiting != 2 {
+		t.Errorf("Stats() = %+v, want DueToday=1 (từ đang ôn), Waiting=2", stats)
 	}
 }

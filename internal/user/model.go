@@ -32,6 +32,9 @@ type User struct {
 	DisplayName  string
 	Role         Role
 	GoogleSub    *string
+	// PasswordSet giữ lại sự thật "có mật khẩu" sau khi hash đã bị xoá khỏi
+	// bản sao trả ra ngoài — xem WithoutSecrets.
+	PasswordSet bool
 	// DailyGoalXP là mục tiêu XP mỗi ngày, một trong DailyGoals.
 	DailyGoalXP int
 	CreatedAt   time.Time
@@ -61,7 +64,17 @@ type ProfileParams struct {
 
 // HasPassword cho biết tài khoản có đăng nhập bằng mật khẩu được hay không.
 func (u User) HasPassword() bool {
-	return u.PasswordHash != nil
+	return u.PasswordHash != nil || u.PasswordSet
+}
+
+// WithoutSecrets trả về bản sao không còn hash mật khẩu, nhưng vẫn nhớ tài
+// khoản CÓ mật khẩu. Chỉ gán PasswordHash = nil thì HasPassword thành false,
+// và phía trước giấu ô đổi mật khẩu của chính người vừa đăng nhập bằng mật
+// khẩu.
+func (u User) WithoutSecrets() User {
+	u.PasswordSet = u.HasPassword()
+	u.PasswordHash = nil
+	return u
 }
 
 // CreateParams là dữ liệu đã hợp lệ để tạo người dùng; mật khẩu phải được băm

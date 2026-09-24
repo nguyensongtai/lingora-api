@@ -367,8 +367,7 @@ func (s *Service) UpdateProfile(ctx context.Context, userID string, displayName 
 	if err != nil {
 		return user.User{}, fmt.Errorf("update profile: %w", err)
 	}
-	updated.PasswordHash = nil
-	return updated, nil
+	return updated.WithoutSecrets(), nil
 }
 
 // ChangePassword đổi mật khẩu rồi đăng xuất mọi phiên, kể cả phiên đang dùng,
@@ -450,7 +449,7 @@ func (s *Service) issue(ctx context.Context, account user.User) (TokenPair, erro
 		return TokenPair{}, fmt.Errorf("issue tokens: %w", err)
 	}
 
-	account.PasswordHash = nil
+	account = account.WithoutSecrets()
 	return TokenPair{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,

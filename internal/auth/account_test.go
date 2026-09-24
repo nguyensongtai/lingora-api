@@ -44,6 +44,10 @@ func TestUpdateProfileTrimsAndPassesOnlyWhatChanged(t *testing.T) {
 	if updated.PasswordHash != nil {
 		t.Error("hash mật khẩu lọt ra khỏi service")
 	}
+	// Xoá hash không được xoá luôn sự thật là tài khoản có mật khẩu.
+	if !updated.HasPassword() {
+		t.Error("HasPassword() = false với một tài khoản có mật khẩu")
+	}
 }
 
 func TestUpdateProfileRejectsInvalidInput(t *testing.T) {
@@ -104,6 +108,10 @@ func TestChangePasswordSignsOutEverySessionAndIssuesANewOne(t *testing.T) {
 	// Thu hồi trước, cấp sau: phiên mới phải là phiên duy nhất còn sống.
 	if pair.RefreshToken == "" || len(sessions.active) != 1 {
 		t.Errorf("phiên còn sống = %d, want đúng một phiên mới", len(sessions.active))
+	}
+	if pair.User.PasswordHash != nil || !pair.User.HasPassword() {
+		t.Errorf("User trả kèm token: hash = %v, HasPassword = %v — want không hash, vẫn có mật khẩu",
+			pair.User.PasswordHash, pair.User.HasPassword())
 	}
 }
 

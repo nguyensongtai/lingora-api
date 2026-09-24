@@ -43,7 +43,9 @@ make createuser email=admin@lingora.vn role=admin
 ```
 
 `make seed` nạp giáo trình mẫu phủ đủ sáu bậc CEFR — đủ khoá, bài và từ vựng để
-mọi màn hình có gì hiển thị. Chạy lại được nhiều lần, không nhân đôi dữ liệu.
+mọi màn hình có gì hiển thị. Chạy lại được nhiều lần, không nhân đôi dữ liệu,
+và **không xoá lịch ôn của ai**: từ vựng được cập nhật tại chỗ (giữ id), chỉ từ
+bị bỏ khỏi danh sách mới bị xoá.
 
 **Bậc CEFR của từng từ lấy từ dữ liệu công bố, không phải phán đoán**, và kiểm
 lại được bằng một lệnh:
@@ -145,6 +147,15 @@ token có role `admin`.
 | `POST` | `/auth/refresh` | — | refresh token nằm trong body |
 | `POST` | `/auth/logout` | — | thu hồi refresh token trong body |
 | `GET` | `/auth/me` | user | |
+| `PATCH` | `/auth/me` | user | tên hiển thị, mục tiêu XP (20 / 50 / 100) |
+| `PUT` | `/auth/me/password` | user | đăng xuất mọi phiên, trả cặp token mới |
+
+Đổi mật khẩu thu hồi **mọi** refresh token của tài khoản — lý do thường gặp
+nhất để đổi mật khẩu là nghi có người khác đang dùng nó — rồi cấp một cặp mới
+cho chính thiết bị vừa đổi. Mật khẩu hiện tại sai là 400 trên field
+`current_password` chứ không phải 401, vì phiên vẫn hợp lệ; sai 5 lần trong 15
+phút thì bị chặn, vì ô đó cũng là một cửa dò mật khẩu. Tài khoản chỉ có Google
+nhận 409. `User` trả về `has_password` để giao diện biết có nên hiện form này.
 
 ### Khoá học và bài học
 
@@ -227,6 +238,25 @@ dài nhất **trong phạm vi được hỏi**, không phải kỷ lục mọi t
 | `GET` | `/me/practice/session` | user |
 | `GET` | `/me/practice/session?lesson_id=…` | user |
 | `POST` | `/me/practice/answers` | user |
+| `GET` | `/me/practice/scores` | user |
+| `PUT` | `/me/practice/lessons/{lessonId}/score` | user |
+
+Năm dạng câu hỏi, xếp luân phiên theo vị trí để hai câu liền nhau ít khi cùng
+kiểu:
+
+| Dạng | Người học làm gì |
+| --- | --- |
+| `multiple_choice` | chọn nghĩa đúng của từ |
+| `fill_blank` | gõ từ bị khoét khỏi câu ví dụ |
+| `listen_choose` | nghe từ, chọn từ vừa nghe |
+| `dictation` | nghe cả câu ví dụ, gõ lại cả câu |
+| `listen_write` | nghe từ, gõ lại đúng chính tả |
+
+Chép chính tả bỏ qua hoa/thường, dấu câu và khoảng trắng thừa — không ai nghe
+được dấu phẩy — nhưng **không** bỏ qua chính tả, và giữ dấu nháy đơn vì nó là
+chính tả (`Nam's` khác `Nams`). Từ không có câu ví dụ thì lượt của `fill_blank`
+và `dictation` lùi về trắc nghiệm. Chữ để đọc nằm ở `speak`, tách khỏi
+`prompt` — thứ được hiện ra.
 
 Câu hỏi **sinh tại chỗ** từ `vocabulary_entries`, không có bảng câu hỏi nào để
 soạn. `internal/practice` vì thế không có repo riêng: nó đi qua
@@ -248,7 +278,13 @@ của khoá nháp là 404 với người học y như `GET /lessons/{id}`.
 Thiếu `lesson_id` ở `POST /answers` thì câu trả lời bị chấm như ôn tập và câu
 sai bị phạt — phía trước phải gửi đúng phạm vi của lượt đang luyện.
 
-`listen_choose` phải gửi cả chữ của từ xuống để trình duyệt đọc lên, nghĩa là
+**Điểm luyện trong bài** chỉ giữ điểm cao nhất mỗi bài và **không cộng XP**
+(người dùng chốt). Điểm do phía trước đếm — server chấm từng câu nhưng không
+giữ phiên — nên `total` bắt buộc đúng bằng số câu một lượt của bài, để "6/6"
+luôn nghĩa là đã trả lời mọi từ. Bài đổi số từ thì điểm cũ bị thay chứ không so
+tiếp. Đây là bảng duy nhất gói `practice` tự lưu.
+
+Ba dạng nghe phải gửi chữ xuống để trình duyệt đọc lên, nghĩa là
 đáp án nằm sẵn trong trang — hệ quả không tránh được khi dùng `speechSynthesis`
 thay vì file audio.
 
@@ -268,6 +304,13 @@ Cả nhánh `/vocabulary` là **công cụ soạn nội dung**, không phải ch
 đọc. Người học đọc ở `/me/vocabulary`, nơi hàng đợi được lọc theo bài họ đã học
 xong — mở `/vocabulary` cho người ngoài là phát không toàn bộ từ và nghĩa, và
 vô hiệu hoá luôn quy tắc mở khoá đó.
+
+**Mỗi ngày tối đa 20 từ mới vào hàng đợi** (mặc định của Anki, người dùng
+chốt). Từ chưa ôn lần nào vượt trần có trạng thái `waiting` và lần lượt vào
+hàng đợi những ngày sau, theo thứ tự đã học — bài xong trước, rồi vị trí trong
+bài. Chỗ đã dùng đếm theo số từ được ôn lần đầu kể từ nửa đêm giờ Việt Nam,
+nên ôn xong một từ mới không trả lại chỗ của nó: trần là 20 từ mỗi ngày, không
+phải 20 từ mỗi lần mở màn hình. Từ đang ôn dở không bao giờ bị giữ lại.
 
 `POST /me/vocabulary/{entryId}/review` nhận `grade` là `remembered` hoặc
 `forgot`, chạy SM-2 và trả về thẻ đã lên lịch lại. Endpoint từ chối những từ
@@ -420,6 +463,9 @@ Migration chạy bằng golang-migrate, mỗi bước một cặp `up`/`down`:
 | 000005 | danh tính Google: `password_hash` nullable, `google_sub` |
 | 000006 | `vocabulary_entries` + `vocabulary_reviews` |
 | 000007 | `courses.position` |
+| 000008 | `lessons.summary` + `lesson_blocks` |
+| 000009 | `lesson_practice_scores` |
+| 000010 | `users.daily_goal_xp` |
 
 ```bash
 make migrate-up

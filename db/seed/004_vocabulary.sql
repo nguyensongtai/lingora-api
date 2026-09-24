@@ -15,25 +15,31 @@
 -- PHẦN CHƯA CÓ NGUỒN: phiên âm, nghĩa tiếng Việt và câu ví dụ do Claude soạn.
 -- Chúng chưa được người có chuyên môn rà soát.
 --
--- File này THAY THẾ toàn bộ từ vựng của những bài nó phụ trách, nên chạy lại
--- là hội tụ chứ không cộng dồn. Kèm theo đó, lịch ôn của người học với những
--- từ bị thay cũng mất (khoá ngoại ON DELETE CASCADE) — chấp nhận được với dữ
--- liệu dev, nhưng đừng chạy file này lên database thật.
+-- File này đưa từ vựng của những bài nó phụ trách về đúng danh sách dưới
+-- đây, nên chạy lại là hội tụ chứ không cộng dồn. Từ còn trong danh sách được
+-- CẬP NHẬT tại chỗ — giữ nguyên id, nên lịch ôn của người học với từ đó còn
+-- nguyên. Chỉ từ bị bỏ khỏi danh sách mới bị xoá, kéo theo lịch ôn của riêng
+-- nó (khoá ngoại ON DELETE CASCADE).
+--
+-- Bản trước xoá sạch rồi chèn lại, nên mỗi lần `make seed` là mọi người dùng
+-- mất sạch lịch ôn — kể cả với những từ không hề đổi.
 
-DELETE FROM vocabulary_entries v
-USING lessons l, courses c
-WHERE v.lesson_id = l.id
-  AND l.course_id = c.id
-  AND c.slug IN (
-      'ngu-phap-co-ban', 'tu-vung-doi-song', 'giao-tiep-hang-ngay',
-      'qua-khu-va-tuong-lai', 'ke-chuyen-va-mo-ta', 'email-va-tin-nhan',
-      'tranh-luan-va-y-kien', 'tieng-anh-cong-so', 'hoc-thuat-va-nghien-cuu',
-      'sac-thai-va-thanh-ngu', 'van-phong-va-tu-tu', 'dien-thuyet-va-thuyet-phuc'
-  );
+BEGIN;
 
-INSERT INTO vocabulary_entries (lesson_id, word, ipa, meaning, example, example_vi, position)
-SELECT l.id, v.word, v.ipa, v.meaning, v.example, v.example_vi, v.position
-FROM (VALUES
+-- Gom danh sách vào một bảng tạm trước: cần đọc nó hai lần — để cập nhật/chèn
+-- và để biết từ nào đã bị bỏ.
+CREATE TEMP TABLE seed_vocabulary (
+    lesson_slug text NOT NULL,
+    word        text NOT NULL,
+    ipa         text NOT NULL,
+    meaning     text NOT NULL,
+    example     text NOT NULL,
+    example_vi  text NOT NULL,
+    position    integer NOT NULL
+) ON COMMIT DROP;
+
+INSERT INTO seed_vocabulary (lesson_slug, word, ipa, meaning, example, example_vi, position)
+VALUES
     -- ===== A1 =====
     ('thi-hien-tai-don','always','/ˈɔːlweɪz/','luôn luôn','She always drinks tea after lunch.','Cô ấy luôn uống trà sau bữa trưa.',0),
     ('thi-hien-tai-don','usually','/ˈjuːʒuəli/','thường thường','We usually walk to school.','Chúng tôi thường đi bộ đến trường.',1),
@@ -149,13 +155,10 @@ FROM (VALUES
     ('ke-ve-ky-nghi','relax','/rɪˈlæks/','thư giãn','We went there to relax.','Chúng tôi đến đó để thư giãn.',2),
     ('ke-ve-ky-nghi','adventure','/ədˈventʃər/','cuộc phiêu lưu','The trip turned into an adventure.','Chuyến đi thành một cuộc phiêu lưu.',3),
     ('ke-ve-ky-nghi','castle','/ˈkæsl/','lâu đài','We visited an old castle.','Chúng tôi thăm một lâu đài cổ.',4),
-    ('ke-ve-ky-nghi','coast','/koʊst/','bờ biển','We drove along the coast.','Chúng tôi lái xe dọc bờ biển.',5)
-) AS v(lesson_slug, word, ipa, meaning, example, example_vi, position)
-JOIN lessons AS l ON l.slug = v.lesson_slug AND l.deleted_at IS NULL;
+    ('ke-ve-ky-nghi','coast','/koʊst/','bờ biển','We drove along the coast.','Chúng tôi lái xe dọc bờ biển.',5);
 
-INSERT INTO vocabulary_entries (lesson_id, word, ipa, meaning, example, example_vi, position)
-SELECT l.id, v.word, v.ipa, v.meaning, v.example, v.example_vi, v.position
-FROM (VALUES
+INSERT INTO seed_vocabulary (lesson_slug, word, ipa, meaning, example, example_vi, position)
+VALUES
     -- ===== B1 =====
     ('mo-ta-nguoi','generous','/ˈdʒenərəs/','hào phóng','He is generous with his time.','Anh ấy rất hào phóng về thời gian.',0),
     ('mo-ta-nguoi','stubborn','/ˈstʌbərn/','bướng bỉnh','My brother can be stubborn.','Em trai tôi đôi khi rất bướng.',1),
@@ -269,13 +272,10 @@ FROM (VALUES
     ('phan-hoi-dong-nghiep','assert','/əˈsɜːrt/','nêu dứt khoát','Assert your point without attacking.','Hãy nêu ý dứt khoát mà không công kích.',2),
     ('phan-hoi-dong-nghiep','correspondence','/ˌkɔːrəˈspɑːndəns/','thư từ trao đổi','Keep the correspondence on file.','Hãy lưu lại thư từ trao đổi.',3),
     ('phan-hoi-dong-nghiep','contradictory','/ˌkɑːntrəˈdɪktəri/','mâu thuẫn nhau','We received contradictory feedback.','Chúng tôi nhận phản hồi mâu thuẫn nhau.',4),
-    ('phan-hoi-dong-nghiep','convinced','/kənˈvɪnst/','tin chắc','I am not convinced by that reason.','Tôi chưa tin chắc vào lý do đó.',5)
-) AS v(lesson_slug, word, ipa, meaning, example, example_vi, position)
-JOIN lessons AS l ON l.slug = v.lesson_slug AND l.deleted_at IS NULL;
+    ('phan-hoi-dong-nghiep','convinced','/kənˈvɪnst/','tin chắc','I am not convinced by that reason.','Tôi chưa tin chắc vào lý do đó.',5);
 
-INSERT INTO vocabulary_entries (lesson_id, word, ipa, meaning, example, example_vi, position)
-SELECT l.id, v.word, v.ipa, v.meaning, v.example, v.example_vi, v.position
-FROM (VALUES
+INSERT INTO seed_vocabulary (lesson_slug, word, ipa, meaning, example, example_vi, position)
+VALUES
     -- ===== C1 =====
     ('trich-dan-nguon','citation','/saɪˈteɪʃn/','trích dẫn nguồn','Every claim needs a citation.','Mỗi khẳng định đều cần trích dẫn nguồn.',0),
     ('trich-dan-nguon','credible','/ˈkredəbl/','đáng tin','Use credible sources only.','Chỉ dùng những nguồn đáng tin.',1),
@@ -388,6 +388,43 @@ FROM (VALUES
     ('ket-bai-dong-lai','wistful','/ˈwɪstfl/','bâng khuâng','The final line is wistful.','Câu cuối mang vẻ bâng khuâng.',2),
     ('ket-bai-dong-lai','rapture','/ˈræptʃər/','niềm hân hoan','The crowd listened in rapture.','Đám đông lắng nghe trong niềm hân hoan.',3),
     ('ket-bai-dong-lai','fruition','/fruˈɪʃn/','sự thành tựu','The plan came to fruition this year.','Kế hoạch thành tựu trong năm nay.',4),
-    ('ket-bai-dong-lai','paramount','/ˈpærəmaʊnt/','tối quan trọng','The last impression is paramount.','Ấn tượng cuối cùng là tối quan trọng.',5)
-) AS v(lesson_slug, word, ipa, meaning, example, example_vi, position)
-JOIN lessons AS l ON l.slug = v.lesson_slug AND l.deleted_at IS NULL;
+    ('ket-bai-dong-lai','paramount','/ˈpærəmaʊnt/','tối quan trọng','The last impression is paramount.','Ấn tượng cuối cùng là tối quan trọng.',5);
+
+-- Từ đã bị bỏ khỏi danh sách: xoá, và lịch ôn của riêng nó đi theo.
+DELETE FROM vocabulary_entries v
+USING lessons l, courses c
+WHERE v.lesson_id = l.id
+  AND l.course_id = c.id
+  AND c.slug IN (
+      'ngu-phap-co-ban', 'tu-vung-doi-song', 'giao-tiep-hang-ngay',
+      'qua-khu-va-tuong-lai', 'ke-chuyen-va-mo-ta', 'email-va-tin-nhan',
+      'tranh-luan-va-y-kien', 'tieng-anh-cong-so', 'hoc-thuat-va-nghien-cuu',
+      'sac-thai-va-thanh-ngu', 'van-phong-va-tu-tu', 'dien-thuyet-va-thuyet-phuc'
+  )
+  AND NOT EXISTS (
+      SELECT 1 FROM seed_vocabulary s
+      WHERE s.lesson_slug = l.slug AND lower(s.word) = lower(v.word)
+  );
+
+-- Từ còn trong danh sách: cập nhật tại chỗ (giữ id, giữ lịch ôn); từ mới thì
+-- chèn. Hàng không đổi gì thì không bị đụng tới, nên updated_at của nó vẫn
+-- nói đúng lần sửa thật gần nhất.
+INSERT INTO vocabulary_entries (lesson_id, word, ipa, meaning, example, example_vi, position)
+SELECT l.id, s.word, s.ipa, s.meaning, s.example, s.example_vi, s.position
+FROM seed_vocabulary AS s
+JOIN lessons AS l ON l.slug = s.lesson_slug AND l.deleted_at IS NULL
+ON CONFLICT (lesson_id, lower(word)) WHERE deleted_at IS NULL DO UPDATE
+SET word       = excluded.word,
+    ipa        = excluded.ipa,
+    meaning    = excluded.meaning,
+    example    = excluded.example,
+    example_vi = excluded.example_vi,
+    position   = excluded.position,
+    updated_at = now()
+WHERE (vocabulary_entries.word, vocabulary_entries.ipa, vocabulary_entries.meaning,
+       vocabulary_entries.example, vocabulary_entries.example_vi, vocabulary_entries.position)
+      IS DISTINCT FROM
+      (excluded.word, excluded.ipa, excluded.meaning,
+       excluded.example, excluded.example_vi, excluded.position);
+
+COMMIT;

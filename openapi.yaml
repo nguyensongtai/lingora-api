@@ -1586,11 +1586,16 @@ components:
 
     PracticeKind:
       type: string
-      enum: [multiple_choice, fill_blank, listen_choose]
+      enum: [multiple_choice, fill_blank, listen_choose, listen_write, dictation]
+      description: |
+        `multiple_choice` chọn nghĩa; `fill_blank` gõ từ còn thiếu trong câu;
+        `listen_choose` nghe rồi chọn từ; `listen_write` nghe rồi gõ từ;
+        `dictation` nghe cả câu rồi gõ lại cả câu (chấm bỏ qua hoa/thường, dấu
+        câu và khoảng trắng thừa — sai chính tả vẫn là sai).
 
     PracticeQuestion:
       type: object
-      required: [entry_id, kind, level, word, prompt, hint, options]
+      required: [entry_id, kind, level, word, prompt, hint, options, speak]
       properties:
         entry_id:
           type: string
@@ -1609,16 +1614,25 @@ components:
         prompt:
           type: string
           description: |
-            Câu dẫn. `multiple_choice`: chính từ đó. `fill_blank`: câu ví dụ đã
-            khoét chỗ trống. `listen_choose`: chuỗi rỗng, câu dẫn là âm thanh.
+            Câu dẫn để HIỆN ra. `multiple_choice`: chính từ đó. `fill_blank`:
+            câu ví dụ đã khoét chỗ trống. Ba dạng nghe: chuỗi rỗng, câu dẫn là
+            âm thanh.
         hint:
           type: string
-          description: Gợi ý thêm; hiện chỉ `fill_blank` dùng, để hiện nghĩa tiếng Việt.
+          description: |
+            Gợi ý thêm: nghĩa tiếng Việt với `fill_blank`, bản dịch của câu với
+            `dictation`. Rỗng với dạng khác.
         options:
           type: array
-          description: Rỗng với `fill_blank` vì dạng đó gõ tay.
+          description: Rỗng với các dạng gõ tay (`fill_blank`, `listen_write`, `dictation`).
           items:
             type: string
+        speak:
+          type: string
+          description: |
+            Chữ để trình duyệt đọc lên với ba dạng nghe: từ với `listen_choose` và
+            `listen_write`, cả câu với `dictation`. Rỗng với dạng khác. Tách
+            khỏi `prompt` vì `prompt` là thứ được hiện ra.
 
     PracticeSession:
       type: object

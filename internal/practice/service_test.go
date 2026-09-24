@@ -175,6 +175,8 @@ func TestSessionRotatesThroughEveryKind(t *testing.T) {
 		practice.KindMultipleChoice,
 		practice.KindFillBlank,
 		practice.KindListenChoose,
+		practice.KindDictation,
+		practice.KindListenWrite,
 	} {
 		if seen[kind] == 0 {
 			t.Errorf("không có câu nào dạng %q; phân bố nhận được: %v", kind, seen)
@@ -194,14 +196,15 @@ func TestSessionFallsBackWhenAKindDoesNotFit(t *testing.T) {
 		card("id-4", "spare", "rảnh rỗi", ""),
 	}
 
-	questions := sessionOf(t, &fakeWords{cards: cards}, 4)
+	cards = append(cards, card("id-5", "fresh", "tươi", ""))
+	questions := sessionOf(t, &fakeWords{cards: cards}, 5)
 
-	if len(questions) != 4 {
-		t.Fatalf("len(questions) = %d, want 4", len(questions))
+	if len(questions) != 5 {
+		t.Fatalf("len(questions) = %d, want 5", len(questions))
 	}
 	for i, question := range questions {
-		if question.Kind == practice.KindFillBlank {
-			t.Errorf("câu %d ra fill_blank dù từ không có câu ví dụ", i)
+		if question.Kind == practice.KindFillBlank || question.Kind == practice.KindDictation {
+			t.Errorf("câu %d ra %s dù từ không có câu ví dụ", i, question.Kind)
 		}
 		if question.Kind == practice.KindMultipleChoice && len(question.Options) == 0 {
 			t.Errorf("câu %d là trắc nghiệm nhưng không có lựa chọn nào", i)
@@ -523,8 +526,8 @@ func TestLessonSessionAsksEveryWordOfTheLessonEvenBeforeItIsUnlocked(t *testing.
 		}
 	}
 	// Mọi từ đều có ví dụ tốt — đúng tình huống từng làm cả phiên thành gõ tay.
-	if len(kinds) != 3 {
-		t.Errorf("kinds = %v, want đủ ba dạng", kinds)
+	if len(kinds) != 5 {
+		t.Errorf("kinds = %v, want đủ năm dạng", kinds)
 	}
 }
 
@@ -614,5 +617,118 @@ func TestCheckLessonRejectsAnUnknownKindBeforeReadingAnything(t *testing.T) {
 	}
 	if words.lessonAsked {
 		t.Error("đã đọc từ vựng dù dạng câu hỏi không hợp lệ")
+	}
+}
+
+/* ---------- nghe rồi viết ---------- */
+
+// lượt thứ tư và thứ năm của vòng luân phiên là chép chính tả và nghe-viết.
+func listeningCards() []vocabulary.Card {
+	cards := []vocabulary.Card{
+		card("id-1", "reluctant", "miễn cưỡng", "She was reluctant to admit it."),
+		card("id-2", "commute", "đi lại", "I commute by bus."),
+		card("id-3", "deadline", "hạn chót", "We missed the deadline."),
+		card("id-4", "umbrella", "cái ô", "Take an umbrella with you."),
+		card("id-5", "spare", "rảnh rỗi", "I read in my spare time."),
+	}
+	cards[3].ExampleVI = "Mang theo ô nhé."
+	return cards
+}
+
+func TestSessionAsksToWriteWhatIsHeard(t *testing.T) {
+	t.Parallel()
+
+	questions := sessionOf(t, &fakeWords{cards: listeningCards()}, 5)
+
+	dictation := questions[3]
+	if dictation.Kind != practice.KindDictation {
+		t.Fatalf("kind = %q, want dictation ở vị trí thứ tư", dictation.Kind)
+	}
+	if dictation.Speak != "Take an umbrella with you." || dictation.Hint != "Mang theo ô nhé." {
+		t.Errorf("speak = %q, hint = %q, want cả câu và bản dịch", dictation.Speak, dictation.Hint)
+	}
+
+	write := questions[4]
+	if write.Kind != practice.KindListenWrite || write.Speak != "spare" {
+		t.Errorf("câu thứ năm = %+v, want listen_write đọc \"spare\"", write)
+	}
+
+	// Với dạng nghe, chữ chỉ được nằm ở Speak: hiện Prompt hay Options ra là
+	// đưa luôn đáp án cho một câu chính tả.
+	for _, question := range []practice.Question{dictation, write} {
+		if question.Prompt != "" || len(question.Options) != 0 {
+			t.Errorf("%s: prompt = %q, options = %v, want rỗng", question.Kind, question.Prompt, question.Options)
+		}
+	}
+}
+
+func TestDictationIgnoresCaseAndPunctuationButNotSpelling(t *testing.T) {
+	t.Parallel()
+
+	words := &fakeWords{cards: listeningCards()}
+	service := newService(words)
+
+	for answer, want := range map[string]bool{
+		"take an umbrella with you":     true,
+		"Take an umbrella, with you!!":  true,
+		"  take   an umbrella with you": true,
+		"Take an umbrela with you.":     false,
+		"Take the umbrella with you.":   false,
+	} {
+		result, err := service.Check(context.Background(), userID, "id-4", practice.KindDictation, answer)
+		if err != nil {
+			t.Fatalf("Check(%q) returned error: %v", answer, err)
+		}
+		if result.Correct != want {
+			t.Errorf("Check(%q).Correct = %v, want %v", answer, result.Correct, want)
+		}
+		if result.Expected != "Take an umbrella with you." {
+			t.Errorf("Expected = %q, want nguyên câu gốc", result.Expected)
+		}
+	}
+}
+
+// Dấu nháy đơn là chính tả, không phải dấu câu: "Nams" không phải "Nam's".
+func TestDictationKeepsApostrophes(t *testing.T) {
+	t.Parallel()
+
+	cards := listeningCards()
+	cards[0].Example = "Did you go to Nam's party?"
+	service := newService(&fakeWords{cards: cards})
+
+	right, _ := service.Check(context.Background(), userID, "id-1", practice.KindDictation, "did you go to Nam’s party")
+	wrong, _ := service.Check(context.Background(), userID, "id-1", practice.KindDictation, "did you go to Nams party")
+	if !right.Correct || wrong.Correct {
+		t.Errorf("nháy cong: %v, bỏ nháy: %v — want true, false", right.Correct, wrong.Correct)
+	}
+}
+
+// Từ không có câu ví dụ thì không có câu chép chính tả nào để chấm, và càng
+// không được phạt vào lịch ôn vì nó.
+func TestDictationOfAWordWithoutAnExampleIsRejectedNotPenalised(t *testing.T) {
+	t.Parallel()
+
+	words := &fakeWords{cards: pool()} // id-2 không có câu ví dụ
+
+	_, err := newService(words).Check(context.Background(), userID, "id-2", practice.KindDictation, "anything")
+	if !errors.Is(err, practice.ErrInvalidKind) {
+		t.Fatalf("error = %v, want ErrInvalidKind", err)
+	}
+	if len(words.graded) != 0 {
+		t.Errorf("graded = %v, want không phạt gì", words.graded)
+	}
+}
+
+func TestListenWriteIsGradedAgainstTheWord(t *testing.T) {
+	t.Parallel()
+
+	service := newService(&fakeWords{cards: listeningCards()})
+
+	result, err := service.Check(context.Background(), userID, "id-5", practice.KindListenWrite, " Spare ")
+	if err != nil {
+		t.Fatalf("Check() returned error: %v", err)
+	}
+	if !result.Correct || result.Expected != "spare" {
+		t.Errorf("result = %+v, want đúng, Expected=spare", result)
 	}
 }

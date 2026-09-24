@@ -118,7 +118,10 @@ func (s *Service) prioritise(cards []vocabulary.Card) []vocabulary.Card {
 // làm ngược lại — hễ câu ví dụ dùng được thì ra fill_blank — và với giáo trình
 // đầy đủ, nơi từ nào cũng có ví dụ tốt, cả mười câu đều thành gõ tay. Dữ liệu
 // mỏng lúc đó che mất chuyện này.
-var rotation = [...]Kind{KindMultipleChoice, KindFillBlank, KindListenChoose}
+//
+// Năm dạng xếp xen kẽ giữa chọn và gõ, giữa nhìn và nghe, để hai câu liền
+// nhau ít khi cùng một kiểu. Một bài sáu từ vẫn gặp đủ cả năm.
+var rotation = [...]Kind{KindMultipleChoice, KindFillBlank, KindListenChoose, KindDictation, KindListenWrite}
 
 // buildQuestion dựng câu hỏi theo dạng tới lượt, và lùi về trắc nghiệm khi dữ
 // liệu của từ không đủ cho dạng đó.
@@ -143,8 +146,24 @@ func (s *Service) buildQuestion(card vocabulary.Card, pool []vocabulary.Card, in
 
 	case KindListenChoose:
 		question.Kind = KindListenChoose
+		question.Speak = card.Word
 		question.Options = s.options(card.Word, pool, func(c vocabulary.Card) string { return c.Word })
 		return question
+
+	case KindListenWrite:
+		question.Kind = KindListenWrite
+		question.Speak = card.Word
+		return question
+
+	case KindDictation:
+		// Chép chính tả cần một câu để đọc. Không có câu ví dụ thì lùi về
+		// trắc nghiệm như fill_blank.
+		if strings.TrimSpace(card.Example) != "" {
+			question.Kind = KindDictation
+			question.Speak = card.Example
+			question.Hint = card.ExampleVI
+			return question
+		}
 	}
 
 	question.Kind = KindMultipleChoice
@@ -200,7 +219,10 @@ func (s *Service) Check(ctx context.Context, userID, entryID string, kind Kind, 
 		return Result{}, err
 	}
 
-	result := grade(card, kind, answer)
+	result, err := grade(card, kind, answer)
+	if err != nil {
+		return Result{}, err
+	}
 	if result.Correct {
 		return result, nil
 	}
@@ -213,12 +235,21 @@ func (s *Service) Check(ctx context.Context, userID, entryID string, kind Kind, 
 }
 
 // grade so câu trả lời với đáp án của đúng dạng câu hỏi đó.
-func grade(card vocabulary.Card, kind Kind, answer string) Result {
-	expected := card.Word
-	if kind == KindMultipleChoice {
-		expected = card.Meaning
+func grade(card vocabulary.Card, kind Kind, answer string) (Result, error) {
+	switch kind {
+	case KindMultipleChoice:
+		return Result{Correct: normalise(answer) == normalise(card.Meaning), Expected: card.Meaning}, nil
+	case KindDictation:
+		// Từ không có câu ví dụ thì không thể có câu chép chính tả. Không chặn
+		// thì đáp án là chuỗi rỗng, mọi câu trả lời đều sai, và câu sai bị
+		// phạt vào lịch ôn — vì một câu hỏi không tồn tại.
+		if strings.TrimSpace(card.Example) == "" {
+			return Result{}, fmt.Errorf("%w: %s has no example to dictate", ErrInvalidKind, card.ID)
+		}
+		return Result{Correct: normaliseSentence(answer) == normaliseSentence(card.Example), Expected: card.Example}, nil
+	default:
+		return Result{Correct: normalise(answer) == normalise(card.Word), Expected: card.Word}, nil
 	}
-	return Result{Correct: normalise(answer) == normalise(expected), Expected: expected}
 }
 
 /* ---------- luyện tập trong bài ---------- */
@@ -269,7 +300,7 @@ func (s *Service) CheckLesson(ctx context.Context, viewer course.Viewer, lessonI
 	}
 	for _, card := range cards {
 		if card.ID == entryID {
-			return grade(card, kind, answer), nil
+			return grade(card, kind, answer)
 		}
 	}
 	return Result{}, fmt.Errorf("check lesson answer %s: %w", entryID, ErrNotFound)
@@ -333,6 +364,21 @@ func clampSize(size int) int {
 // dấu cách hay viết hoa đầu câu không phải là nhớ sai từ.
 func normalise(value string) string {
 	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(value))), " ")
+}
+
+// sentencePunctuation là những dấu bỏ qua khi chấm chép chính tả. Dấu nháy
+// đơn KHÔNG nằm trong đó: nó là một phần chính tả của từ (Nam's, can't).
+var sentencePunctuation = strings.NewReplacer(
+	".", " ", ",", " ", "!", " ", "?", " ", ";", " ", ":", " ",
+	"\"", " ", "“", " ", "”", " ", "(", " ", ")", " ",
+	"—", " ", "–", " ", "-", " ",
+	"‘", "'", "’", "'",
+)
+
+// normaliseSentence bỏ hoa/thường, dấu câu và khoảng trắng thừa. Nghe không
+// thể phân biệt "we" với "We," — nhưng sai một chữ cái vẫn là sai chính tả.
+func normaliseSentence(value string) string {
+	return normalise(sentencePunctuation.Replace(value))
 }
 
 // wordBoundary dựng biểu thức khớp đúng một từ, không khớp khi nó nằm bên

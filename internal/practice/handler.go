@@ -81,6 +81,7 @@ func (h *Handler) session(w http.ResponseWriter, r *http.Request) {
 			Prompt:  question.Prompt,
 			Hint:    question.Hint,
 			Options: options,
+			Speak:   question.Speak,
 		})
 	}
 
@@ -125,7 +126,7 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, ErrInvalidKind):
 		httpx.Error(w, http.StatusBadRequest, httpx.CodeValidation, "Dữ liệu không hợp lệ.",
-			map[string]string{"kind": "phải là multiple_choice, fill_blank hoặc listen_choose"})
+			map[string]string{"kind": "phải là một dạng câu hỏi hợp lệ, và dùng được cho từ này"})
 	case errors.Is(err, ErrNotFound), errors.Is(err, vocabulary.ErrNotFound), errors.Is(err, vocabulary.ErrNotUnlocked):
 		httpx.Error(w, http.StatusNotFound, httpx.CodeNotFound, "Không tìm thấy câu hỏi này.", nil)
 	case errors.Is(err, course.ErrNotFound), errors.Is(err, course.ErrLessonNotFound):

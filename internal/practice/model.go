@@ -17,12 +17,16 @@ const (
 	KindFillBlank Kind = "fill_blank"
 	// KindListenChoose: máy đọc từ lên, chọn đúng từ vừa nghe.
 	KindListenChoose Kind = "listen_choose"
+	// KindListenWrite: máy đọc từ lên, người học gõ lại đúng chính tả.
+	KindListenWrite Kind = "listen_write"
+	// KindDictation: máy đọc cả câu ví dụ, người học gõ lại cả câu.
+	KindDictation Kind = "dictation"
 )
 
 // Valid cho biết giá trị có phải một dạng câu hỏi hay không.
 func (k Kind) Valid() bool {
 	switch k {
-	case KindMultipleChoice, KindFillBlank, KindListenChoose:
+	case KindMultipleChoice, KindFillBlank, KindListenChoose, KindListenWrite, KindDictation:
 		return true
 	default:
 		return false
@@ -44,10 +48,21 @@ type Question struct {
 
 	// Prompt là câu dẫn: từ cần dịch, hoặc câu ví dụ đã khoét chỗ trống.
 	Prompt string
-	// Hint là gợi ý thêm; hiện chỉ dùng cho KindFillBlank để hiện nghĩa.
+	// Hint là gợi ý thêm: nghĩa của từ với KindFillBlank, bản dịch của câu với
+	// KindDictation.
 	Hint string
-	// Options rỗng với KindFillBlank vì dạng đó gõ tay.
+	// Options rỗng với các dạng gõ tay.
 	Options []string
+
+	// Speak là chữ để máy đọc lên với ba dạng nghe; rỗng với dạng khác. Tách
+	// khỏi Prompt vì Prompt là thứ được HIỆN ra — với dạng nghe, hiện chữ lên
+	// là đưa luôn đáp án.
+	Speak string
+}
+
+// Typed cho biết dạng câu hỏi có phải gõ tay hay không.
+func (k Kind) Typed() bool {
+	return k == KindFillBlank || k == KindListenWrite || k == KindDictation
 }
 
 // Result là kết quả chấm một câu.

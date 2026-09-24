@@ -117,17 +117,23 @@ func (e LessonBlockKind) Valid() bool {
 
 // Defines values for PracticeKind.
 const (
+	Dictation      PracticeKind = "dictation"
 	FillBlank      PracticeKind = "fill_blank"
 	ListenChoose   PracticeKind = "listen_choose"
+	ListenWrite    PracticeKind = "listen_write"
 	MultipleChoice PracticeKind = "multiple_choice"
 )
 
 // Valid indicates whether the value is a known member of the PracticeKind enum.
 func (e PracticeKind) Valid() bool {
 	switch e {
+	case Dictation:
+		return true
 	case FillBlank:
 		return true
 	case ListenChoose:
+		return true
+	case ListenWrite:
 		return true
 	case MultipleChoice:
 		return true
@@ -408,9 +414,14 @@ type LoginRequest struct {
 // PracticeAnswer defines model for PracticeAnswer.
 type PracticeAnswer struct {
 	// Answer Lựa chọn đã chọn, hoặc chuỗi đã gõ. So sánh bỏ qua hoa/thường và khoảng trắng thừa.
-	Answer  string       `json:"answer"`
-	EntryId string       `json:"entry_id"`
-	Kind    PracticeKind `json:"kind"`
+	Answer  string `json:"answer"`
+	EntryId string `json:"entry_id"`
+
+	// Kind `multiple_choice` chọn nghĩa; `fill_blank` gõ từ còn thiếu trong câu;
+	// `listen_choose` nghe rồi chọn từ; `listen_write` nghe rồi gõ từ;
+	// `dictation` nghe cả câu rồi gõ lại cả câu (chấm bỏ qua hoa/thường, dấu
+	// câu và khoảng trắng thừa — sai chính tả vẫn là sai).
+	Kind PracticeKind `json:"kind"`
 
 	// LessonId Có khi câu hỏi đến từ lượt luyện trong bài (session với lesson_id).
 	// Khi đó câu sai KHÔNG đụng tới lịch ôn: đây là lần gặp đầu, không
@@ -418,26 +429,41 @@ type PracticeAnswer struct {
 	LessonId *string `json:"lesson_id,omitempty"`
 }
 
-// PracticeKind defines model for PracticeKind.
+// PracticeKind `multiple_choice` chọn nghĩa; `fill_blank` gõ từ còn thiếu trong câu;
+// `listen_choose` nghe rồi chọn từ; `listen_write` nghe rồi gõ từ;
+// `dictation` nghe cả câu rồi gõ lại cả câu (chấm bỏ qua hoa/thường, dấu
+// câu và khoảng trắng thừa — sai chính tả vẫn là sai).
 type PracticeKind string
 
 // PracticeQuestion defines model for PracticeQuestion.
 type PracticeQuestion struct {
 	EntryId string `json:"entry_id"`
 
-	// Hint Gợi ý thêm; hiện chỉ `fill_blank` dùng, để hiện nghĩa tiếng Việt.
-	Hint string       `json:"hint"`
+	// Hint Gợi ý thêm: nghĩa tiếng Việt với `fill_blank`, bản dịch của câu với
+	// `dictation`. Rỗng với dạng khác.
+	Hint string `json:"hint"`
+
+	// Kind `multiple_choice` chọn nghĩa; `fill_blank` gõ từ còn thiếu trong câu;
+	// `listen_choose` nghe rồi chọn từ; `listen_write` nghe rồi gõ từ;
+	// `dictation` nghe cả câu rồi gõ lại cả câu (chấm bỏ qua hoa/thường, dấu
+	// câu và khoảng trắng thừa — sai chính tả vẫn là sai).
 	Kind PracticeKind `json:"kind"`
 
 	// Level Trình độ theo khung CEFR.
 	Level CourseLevel `json:"level"`
 
-	// Options Rỗng với `fill_blank` vì dạng đó gõ tay.
+	// Options Rỗng với các dạng gõ tay (`fill_blank`, `listen_write`, `dictation`).
 	Options []string `json:"options"`
 
-	// Prompt Câu dẫn. `multiple_choice`: chính từ đó. `fill_blank`: câu ví dụ đã
-	// khoét chỗ trống. `listen_choose`: chuỗi rỗng, câu dẫn là âm thanh.
+	// Prompt Câu dẫn để HIỆN ra. `multiple_choice`: chính từ đó. `fill_blank`:
+	// câu ví dụ đã khoét chỗ trống. Ba dạng nghe: chuỗi rỗng, câu dẫn là
+	// âm thanh.
 	Prompt string `json:"prompt"`
+
+	// Speak Chữ để trình duyệt đọc lên với ba dạng nghe: từ với `listen_choose` và
+	// `listen_write`, cả câu với `dictation`. Rỗng với dạng khác. Tách
+	// khỏi `prompt` vì `prompt` là thứ được hiện ra.
+	Speak string `json:"speak"`
 
 	// Word Từ tiếng Anh. Với `listen_choose`, phía trước cần nó để máy đọc lên
 	// — nghĩa là đáp án nằm sẵn trong trang. Đó là hệ quả không tránh

@@ -547,6 +547,77 @@ Màn học giờ tự ẩn câu mẫu trùng như vậy.
 từ vựng. Giải thích ngữ pháp, dựng hội thoại và chọn câu mẫu là việc sư phạm, do
 Claude soạn, và cần người dạy tiếng Anh đọc lại trước khi có người học thật.
 
+## Triển khai lên Railway
+
+Cả hệ thống nằm trong một project Railway: `Postgres` (18), `Redis`,
+`lingora-api` và `lingora-web`. Hai service code build từ GitHub bằng
+Dockerfile theo `railway.json` của từng repo. API chạy migration trước mỗi lần
+deploy (`migrate-up`); migration lỗi thì deploy dừng và bản đang chạy giữ
+nguyên.
+
+**Postgres phải là bản 18**: migration dùng `uuidv7()`, hàm chỉ có từ PG 18.
+Dùng template "PostgreSQL 18" của Railway, không phải template Postgres mặc
+định nếu nó còn là bản cũ hơn.
+
+### Các bước
+
+1. Tạo project trên Railway, thêm **PostgreSQL 18** (đặt tên service là
+   `Postgres`) và **Redis** (tên `Redis`).
+2. Thêm service từ repo `lingora-api`, đặt tên `lingora-api`, rồi khai biến:
+
+   | Biến | Giá trị |
+   | --- | --- |
+   | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
+   | `REDIS_URL` | `${{Redis.REDIS_URL}}` |
+   | `JWT_SECRET` | `openssl rand -base64 48` |
+   | `BFF_SHARED_SECRET` | `openssl rand -base64 48` (khác JWT_SECRET) |
+   | `TRUSTED_PROXY_HEADER` | `X-Forwarded-For` |
+   | `APP_ENV` | `production` |
+   | `CORS_ALLOWED_ORIGINS` | `https://<tên miền web>` — điền sau bước 3 |
+
+   Settings → Networking → **Generate Domain**.
+3. Thêm service từ repo `lingora-web`, tên `lingora-web`:
+
+   | Biến | Giá trị |
+   | --- | --- |
+   | `NEXT_PUBLIC_API_URL` | `https://<tên miền api>/v1` |
+   | `NEXT_PUBLIC_SITE_URL` | `https://<tên miền web>` |
+   | `BFF_SHARED_SECRET` | `${{lingora-api.BFF_SHARED_SECRET}}` |
+   | `TRUSTED_PROXY_HEADER` | `X-Forwarded-For` |
+
+   Generate Domain cho web, rồi quay lại điền `CORS_ALLOWED_ORIGINS` của API.
+   Hai biến `NEXT_PUBLIC_*` được nhúng lúc build: đổi chúng thì phải
+   **build lại** web, restart không đủ.
+4. Nạp giáo trình — một lần, từ máy mình. Lấy `DATABASE_PUBLIC_URL` ở tab
+   Variables của service `Postgres`:
+
+   ```bash
+   make seed-prod PROD_DATABASE_URL='postgres://…'
+   ```
+
+   Lệnh hỏi lại trước khi ghi. **Chạy lại sau khi admin đã sửa bài là mất
+   phần sửa đó** — 005 và 006 thay nội dung bài.
+5. Tạo tài khoản admin (JWT_SECRET chỉ cần khác rỗng, lệnh này không ký token):
+
+   ```bash
+   DATABASE_URL='postgres://…' JWT_SECRET=khong-dung-toi make createuser email=ban@example.com role=admin
+   ```
+
+### Kiểm sau khi deploy
+
+- `https://<api>/readyz` trả `{"status":"ok"}`.
+- **Header IP của Railway**: tài liệu của Railway chưa nói rõ X-Forwarded-For
+  có bị người gọi giả mạo được không. Gọi một lần có header giả rồi xem log:
+
+  ```bash
+  curl -s -X POST https://<api>/v1/auth/login -H 'X-Forwarded-For: 1.2.3.4' \
+    -H 'Content-Type: application/json' -d '{"email":"x@x.vn","password":"sai-mat-khau-12"}'
+  ```
+
+  Dòng log của request đó phải ghi `ip` là IP thật của máy bạn. Nếu nó ghi
+  `1.2.3.4` thì Railway không ghi đè header: đặt `TRUSTED_PROXY_HEADER=X-Real-IP`
+  rồi thử lại.
+
 ## Công cụ
 
 ```bash

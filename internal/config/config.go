@@ -31,7 +31,17 @@ type Config struct {
 	// Để trống thì hạn mức đếm trong bộ nhớ của từng tiến trình — chỉ đúng khi
 	// chạy đúng một instance.
 	RedisURL string
+	// TrustedProxyHeader là header proxy phía trước tự đặt để nói IP người
+	// dùng (ví dụ X-Forwarded-For). Rỗng: không tin header nào.
+	TrustedProxyHeader string
+	// BFFSharedSecret cho phép máy chủ web nói IP của người đang đăng nhập.
+	// Rỗng thì tắt; đặt thì phải dài ít nhất 32 byte.
+	BFFSharedSecret string
 }
+
+// minBFFSecretLen giống độ dài tối thiểu của JWT secret: đây cũng là một thứ
+// cho phép tự khai danh tính (ở đây là IP), nên đoán được là mất lớp chặn.
+const minBFFSecretLen = 32
 
 // Load reads the configuration from the environment. Cloud Run injects PORT, so
 // it is read as a string and never rewritten.
@@ -46,6 +56,8 @@ func Load() (Config, error) {
 		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
 		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
 		RedisURL:           os.Getenv("REDIS_URL"),
+		TrustedProxyHeader: os.Getenv("TRUSTED_PROXY_HEADER"),
+		BFFSharedSecret:    os.Getenv("BFF_SHARED_SECRET"),
 	}
 
 	accessTTL, err := parseDuration("ACCESS_TOKEN_TTL", 15*time.Minute)
@@ -65,6 +77,10 @@ func Load() (Config, error) {
 	}
 	if cfg.JWTSecret == "" {
 		return Config{}, fmt.Errorf("%w: JWT_SECRET", ErrMissingEnv)
+	}
+
+	if cfg.BFFSharedSecret != "" && len(cfg.BFFSharedSecret) < minBFFSecretLen {
+		return Config{}, fmt.Errorf("config: BFF_SHARED_SECRET must be at least %d bytes", minBFFSecretLen)
 	}
 
 	level, err := parseLogLevel(lookup("LOG_LEVEL", "info"))

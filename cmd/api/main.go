@@ -112,7 +112,11 @@ func run() error {
 	router := chi.NewRouter()
 	router.Use(
 		middleware.RequestID,
-		middleware.RealIP,
+		// Thay cho middleware.RealIP, vốn tin header IP từ bất kỳ ai.
+		httpx.ClientIP(httpx.ClientIPConfig{
+			ProxyHeader: cfg.TrustedProxyHeader,
+			BFFSecret:   cfg.BFFSharedSecret,
+		}),
 		// Logger đứng trước Recoverer để một panic vẫn để lại đúng một dòng
 		// request kèm status 500, chứ không biến mất khỏi log truy cập.
 		httpx.RequestLogger,

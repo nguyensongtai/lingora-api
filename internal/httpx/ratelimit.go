@@ -48,8 +48,8 @@ func WriteRateLimited(w http.ResponseWriter, retryAfter time.Duration) {
 		"Bạn đã thử quá nhiều lần, vui lòng chờ một lát rồi thử lại.", nil)
 }
 
-// clientIP lấy phần host của RemoteAddr. Middleware RealIP đã chuẩn hoá giá trị
-// này từ header của proxy trước khi request tới đây.
+// clientIP lấy phần host của RemoteAddr. Middleware ClientIP đã đặt giá trị
+// này theo đúng nguồn IP được tin trước khi request tới đây.
 func clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
